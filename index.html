@@ -9,583 +9,230 @@
     <!-- HTML2PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans">
+<body class="bg-gray-50 text-gray-800 font-sans">
 
     <!-- OVERLAY LOADING -->
-    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-        <div class="text-white text-xl animate-pulse">Memproses...</div>
+    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[100] flex justify-center items-center">
+        <div class="text-white text-xl font-bold animate-pulse">Memproses Data...</div>
     </div>
 
-    <!-- AREA PUBLIC VIEW (Hanya muncul jika diakses via link publik) -->
-    <div id="publicViewArea" class="hidden min-h-screen flex items-center justify-center">
+    <!-- AREA PUBLIC VIEW (Hanya muncul jika URL ada parameter ?doc=) -->
+    <div id="publicViewArea" class="hidden min-h-screen flex items-center justify-center bg-gray-100">
         <div class="bg-white p-8 rounded shadow-md w-96 text-center" id="pinForm">
-            <h2 class="text-2xl font-bold mb-4">Akses Dokumen Rahasia</h2>
-            <p class="mb-4 text-sm text-gray-600">Masukkan 4-Digit PIN untuk melihat Invoice</p>
-            <input type="text" id="publicPin" class="w-full border p-2 mb-4 rounded text-center text-2xl tracking-widest" maxlength="4">
-            <button onclick="unlockPublicDoc()" class="w-full bg-green-600 text-white p-2 rounded">Buka Dokumen</button>
+            <h2 class="text-2xl font-bold mb-4">Akses Dokumen Klien</h2>
+            <p class="mb-4 text-sm text-gray-600">Masukkan 4-Digit PIN untuk melihat Invoice Anda</p>
+            <input type="text" id="publicPin" class="w-full border-2 border-indigo-300 p-2 mb-4 rounded text-center text-3xl tracking-widest font-bold" maxlength="4">
+            <button onclick="unlockPublicDoc()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded font-bold transition">Buka Dokumen</button>
         </div>
-        <div id="publicDocContent" class="hidden bg-white p-8 max-w-4xl w-full my-8 mx-auto shadow">
-            <!-- Tempat render dokumen publik -->
-            <button onclick="downloadPDF('publicDocContent', 'Invoice_Public')" class="mb-4 bg-red-600 text-white px-4 py-2 rounded print:hidden">Download PDF A4</button>
-            <div id="renderedPublicDoc"></div>
+        <div id="publicDocContent" class="hidden bg-white p-8 max-w-4xl w-full my-8 mx-auto shadow-lg">
+            <button onclick="downloadPDF('renderedPublicDoc', 'Invoice_Public')" class="mb-6 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded print:hidden flex items-center gap-2">
+                Download PDF A4
+            </button>
+            <div id="renderedPublicDoc" class="p-4"></div>
         </div>
     </div>
 
-    <!-- AREA ADMIN (Login & Dashboard) -->
+    <!-- AREA ADMIN -->
     <div id="adminArea" class="hidden">
         
         <!-- LOGIN -->
         <div id="loginScreen" class="min-h-screen flex items-center justify-center">
-            <div class="bg-white p-8 rounded shadow-md w-96">
+            <div class="bg-white p-8 rounded shadow-lg w-96 border-t-4 border-blue-600">
                 <h2 class="text-2xl font-bold mb-6 text-center">Admin Login</h2>
-                <input type="text" id="username" placeholder="Username" class="w-full border p-2 mb-4 rounded">
-                <input type="password" id="password" placeholder="Password" class="w-full border p-2 mb-6 rounded">
-                <button onclick="login()" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Login</button>
+                <input type="text" id="username" placeholder="Username" class="w-full border p-2 mb-4 rounded bg-gray-50">
+                <input type="password" id="password" placeholder="Password" class="w-full border p-2 mb-6 rounded bg-gray-50">
+                <button onclick="login()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded font-bold">Login Sistem</button>
             </div>
         </div>
 
-        <!-- DASHBOARD (Tampil setelah login) -->
+        <!-- DASHBOARD MAIN -->
         <div id="dashboardScreen" class="hidden">
-            <nav class="bg-blue-800 text-white p-4 shadow-md flex justify-between print:hidden">
-                <div class="font-bold text-xl">Sistem Bisnis</div>
-                <div class="space-x-4">
-                    <button onclick="showPage('master')" class="hover:text-gray-300">Master Item</button>
-                    <button onclick="showPage('quote')" class="hover:text-gray-300">Quotation</button>
-                    <button onclick="showPage('invoice')" class="hover:text-gray-300">Invoice</button>
-                    <!-- 👇 TOMBOL BARU 👇 -->
-                    <button onclick="showPage('history'); fetchHistory();" class="hover:text-gray-300 font-bold text-yellow-300">History</button>
-                    
-                    <button onclick="logout()" class="text-red-300 hover:text-red-100 ml-4">Logout</button>
+            <nav class="bg-blue-800 text-white p-4 shadow-md flex justify-between items-center print:hidden sticky top-0 z-40">
+                <div class="font-bold text-xl tracking-wide">ERP / Invoicing</div>
+                <div class="space-x-2">
+                    <button onclick="showPage('master')" class="px-3 py-1 rounded hover:bg-blue-700 font-medium">Master Item</button>
+                    <button onclick="showPage('quote')" class="px-3 py-1 rounded hover:bg-blue-700 font-medium">Quotation</button>
+                    <button onclick="showPage('invoice')" class="px-3 py-1 rounded hover:bg-blue-700 font-medium">Invoice</button>
+                    <button onclick="logout()" class="px-3 py-1 ml-4 rounded bg-red-600 hover:bg-red-700 font-bold">Logout</button>
                 </div>
             </nav>
 
-            <div class="container mx-auto p-4 mt-4">
+            <div class="container mx-auto p-4 mt-2 max-w-6xl">
                 
                 <!-- PAGE: MASTER ITEM -->
-                <div id="page-master" class="page-content hidden bg-white p-6 rounded shadow">
-                    <h2 class="text-xl font-bold mb-4">Input Master Barang/Jasa</h2>
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <input type="text" id="m_mainCat" placeholder="Kategori Utama" class="border p-2 rounded">
-                        <input type="text" id="m_subCat" placeholder="Sub Kategori" class="border p-2 rounded">
-                        <input type="text" id="m_name" placeholder="Nama Item/Jasa" class="border p-2 rounded">
-                        <input type="number" id="m_price" placeholder="Harga Default" class="border p-2 rounded">
+                <div id="page-master" class="page-content hidden">
+                    <div class="bg-white p-6 rounded shadow-sm border">
+                        <h2 class="text-xl font-bold mb-4 text-gray-700 border-b pb-2">Input Master Barang/Jasa</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <input type="text" id="m_mainCat" placeholder="Kategori Utama (cth: Jasa IT)" class="border p-2 rounded">
+                            <input type="text" id="m_subCat" placeholder="Sub Kategori (cth: Web Dev)" class="border p-2 rounded">
+                            <input type="text" id="m_name" placeholder="Nama Item/Jasa" class="border p-2 rounded">
+                            <input type="number" id="m_price" placeholder="Harga Default (Tanpa titik)" class="border p-2 rounded">
+                        </div>
+                        <button onclick="saveMasterItem()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-bold">Simpan Item Baru</button>
                     </div>
-                    <button onclick="saveMasterItem()" class="bg-blue-600 text-white px-4 py-2 rounded">Simpan Item Baru</button>
                 </div>
 
                 <!-- PAGE: QUOTATION -->
-                <div id="page-quote" class="page-content hidden bg-white p-6 rounded shadow">
-                    <h2 class="text-xl font-bold mb-4">Buat Quotation Baru</h2>
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <input type="text" id="q_to" placeholder="Tertuju Kepada (Nama Klien)" class="border p-2 rounded">
-                        <input type="text" id="q_phone" placeholder="No Telp" class="border p-2 rounded">
-                        <textarea id="q_address" placeholder="Alamat" class="border p-2 rounded col-span-2"></textarea>
-                    </div>
-                    
-                    <h3 class="font-bold mt-6 mb-2">Pilih Item:</h3>
-                    <div class="flex gap-2 mb-4">
-                        <button onclick="fetchMasterItems()" class="bg-gray-200 px-3 py-1 rounded text-sm">Load Master Items</button>
-                        <select id="q_itemSelect" class="border p-2 rounded flex-1"></select>
-                        <button onclick="addQuoteItem()" class="bg-green-600 text-white px-4 py-2 rounded">Tambah</button>
-                    </div>
-
-                    <table class="w-full text-left border-collapse mb-4">
-                        <thead><tr class="bg-gray-100 border-b"><th class="p-2">Item</th><th class="p-2">Harga</th><th class="p-2">Aksi</th></tr></thead>
-                        <tbody id="q_tableBody"></tbody>
-                    </table>
-                    <div class="text-right font-bold text-xl mb-4">Total: Rp <span id="q_total">0</span></div>
-                    
-                    <button onclick="generateQuotation()" class="bg-blue-600 text-white px-4 py-2 rounded w-full">Simpan & Generate Quotation</button>
-                </div>
-
-                <!-- PAGE: INVOICE & GENERATE PDF -->
-                <div id="page-invoice" class="page-content hidden bg-white p-6 rounded shadow">
-                    <h2 class="text-xl font-bold mb-4">Buat Invoice (Dari Quotation)</h2>
-                    <div class="mb-4 p-4 border rounded bg-yellow-50">
-                        <label class="block font-bold text-sm mb-1">ID Quotation Referensi:</label>
-                        <input type="text" id="i_quoteRef" placeholder="Misal: QT2310-0001" class="border p-2 rounded w-full mb-2">
-                        <p class="text-xs text-gray-500">*Sistem akan menarik data item dari Quotation, Anda bisa mengubah harganya nanti.</p>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block font-bold text-sm mb-1">Ceklis Pajak:</label>
-                            <label class="inline-flex items-center mr-4"><input type="checkbox" id="i_ppn" class="mr-1" onchange="calculateInvoice()"> + PPN 11%</label>
-                            <label class="inline-flex items-center"><input type="checkbox" id="i_pph23" class="mr-1" onchange="calculateInvoice()"> - PPh23 2%</label>
+                <div id="page-quote" class="page-content hidden">
+                    <!-- Form Input Quotation -->
+                    <div class="bg-white p-6 rounded shadow-sm border mb-8 border-t-4 border-blue-500">
+                        <h2 class="text-xl font-bold mb-4 text-blue-800">Buat Quotation Baru</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <input type="text" id="q_to" placeholder="Tertuju Kepada (Nama Klien / Perusahaan)" class="border p-2 rounded">
+                            <input type="text" id="q_phone" placeholder="No Telp Klien" class="border p-2 rounded">
+                            <textarea id="q_address" placeholder="Alamat Klien" class="border p-2 rounded" rows="2"></textarea>
+                            <textarea id="q_desc" placeholder="Deskripsi Pekerjaan / Tujuan Penawaran (Biar lebih jelas)" class="border p-2 rounded" rows="2"></textarea>
                         </div>
-                        <div>
-                            <label class="block font-bold text-sm mb-1">Rekening Tujuan:</label>
-                            <select id="i_bank" class="border p-2 rounded w-full">
-                                <option value="BCA-8008">BCA - 6470598008 (Fiky Alannuari)</option>
-                                <option value="DANA-6814">DANA - 081387926814 (Fiky Alannuari)</option>
-                                <option value="JAGO-2400">JAGO - 103215612400 (Fiky Alannuari)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="block font-bold text-sm mb-1">Catatan Tambahan (Cara Pembayaran/Termin):</label>
-                        <textarea id="i_notes" class="border p-2 rounded w-full" rows="2"></textarea>
-                    </div>
-
-                    <div class="mb-6">
-                        <label class="block font-bold text-sm mb-1">Upload Bukti Pengerjaan (Opsional):</label>
-                        <input type="file" id="i_file" class="border p-2 rounded w-full">
-                    </div>
-
-                    <button onclick="generateInvoice()" class="bg-indigo-600 text-white px-4 py-2 rounded w-full">Simpan & Buat PDF Invoice</button>
-
-                    <!-- TEMPLATE PDF YANG AKAN DI-RENDER -->
-                    <div id="pdfTemplate" class="mt-8 border-t-4 border-indigo-600 pt-8 hidden">
-                        <div class="flex justify-between items-start mb-8">
-                            <div>
-                                <h1 class="text-4xl font-bold text-indigo-800">INVOICE</h1>
-                                <p class="text-gray-600 mt-2" id="pdf_invID">INV-XXXX</p>
+                        
+                        <div class="bg-gray-50 p-4 rounded border mb-4">
+                            <h3 class="font-bold mb-2">Pilih Item Penawaran:</h3>
+                            <div class="flex gap-2 mb-4">
+                                <button onclick="fetchMasterItems()" class="bg-gray-800 text-white px-3 py-2 rounded text-sm hover:bg-gray-700">Load Master Data</button>
+                                <select id="q_itemSelect" class="border p-2 rounded flex-1"></select>
+                                <button onclick="addQuoteItem()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold">Tambah Ke List</button>
                             </div>
-                            <div class="text-right">
-                                <h2 class="font-bold">Fiky Alannuari</h2>
-                                <p class="text-sm">Cengkareng, Jakarta Barat 11730<br>DKI Jakarta, Indonesia</p>
-                            </div>
-                        </div>
-                        <!-- Konten tabel PDF akan diinjeksi via JS -->
-                        <div id="pdf_content"></div>
-                        <div class="mt-8">
-                            <button onclick="downloadPDF('pdfTemplate', 'Invoice')" class="bg-red-600 text-white px-4 py-2 rounded print:hidden">Download PDF A4</button>
-                            <div class="mt-4 p-4 bg-green-100 rounded print:hidden" id="publicLinkArea"></div>
-                        </div>
-                    </div>
-                </div>
-                <!-- PAGE: HISTORY TRANSAKSI -->
-                <div id="page-history" class="page-content hidden bg-white p-6 rounded shadow">
-                    <h2 class="text-2xl font-bold mb-6 border-b pb-2">History Transaksi</h2>
-                    
-                    <!-- TABEL INVOICE -->
-                    <div class="mb-8">
-                        <h3 class="font-bold text-lg mb-3 text-indigo-700">Daftar Invoice Terbit</h3>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse min-w-max">
-                                <thead>
-                                    <tr class="bg-indigo-100 border-b">
-                                        <th class="p-2">Inv ID</th>
-                                        <th class="p-2">Tanggal</th>
-                                        <th class="p-2">Total</th>
-                                        <th class="p-2">Akses Publik & PIN</th>
-                                        <th class="p-2 text-center">Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="h_invoiceBody">
-                                    <tr><td colspan="5" class="text-center p-4">Loading...</td></tr>
-                                </tbody>
+
+                            <table class="w-full text-left border-collapse bg-white border">
+                                <thead><tr class="bg-gray-200"><th class="p-2 border">Nama Item/Jasa</th><th class="p-2 border text-right">Harga</th><th class="p-2 border text-center">Aksi</th></tr></thead>
+                                <tbody id="q_tableBody"></tbody>
                             </table>
+                            <div class="text-right font-bold text-2xl mt-4 text-blue-700">Total Penawaran: Rp <span id="q_total">0</span></div>
                         </div>
+                        
+                        <button onclick="generateQuotation()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded w-full font-bold text-lg">Simpan & Generate Quotation</button>
                     </div>
 
-                    <!-- TABEL QUOTATION -->
-                    <div>
-                        <h3 class="font-bold text-lg mb-3 text-blue-700">Daftar Quotation</h3>
+                    <!-- History Quotation -->
+                    <div class="bg-white p-6 rounded shadow-sm border">
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                            <h2 class="text-xl font-bold text-gray-700">History Quotation</h2>
+                            <button onclick="fetchHistory('quote')" class="text-sm bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 font-bold">Refresh Data</button>
+                        </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse min-w-max">
                                 <thead>
-                                    <tr class="bg-blue-100 border-b">
+                                    <tr class="bg-blue-50 border-b">
                                         <th class="p-2">Quote ID</th>
-                                        <th class="p-2">Klien (Tertuju)</th>
+                                        <th class="p-2">Klien</th>
+                                        <th class="p-2">Deskripsi</th>
                                         <th class="p-2">Tanggal</th>
-                                        <th class="p-2">Total</th>
+                                        <th class="p-2 text-right">Total</th>
                                         <th class="p-2 text-center">Aksi</th>
                                     </tr>
                                 </thead>
-                                <tbody id="h_quoteBody">
-                                    <tr><td colspan="5" class="text-center p-4">Loading...</td></tr>
-                                </tbody>
+                                <tbody id="history_quoteBody"></tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+
+                <!-- PAGE: INVOICE -->
+                <div id="page-invoice" class="page-content hidden">
+                    <!-- Form Input Invoice -->
+                    <div class="bg-white p-6 rounded shadow-sm border mb-8 border-t-4 border-indigo-500">
+                        <h2 class="text-xl font-bold mb-4 text-indigo-800">Buat Invoice Baru</h2>
+                        
+                        <!-- Search Quotation Modul -->
+                        <div class="mb-6 p-4 border border-indigo-200 rounded bg-indigo-50 flex gap-2 items-end">
+                            <div class="flex-1">
+                                <label class="block font-bold text-sm mb-1 text-indigo-900">Tarik Data dari Quotation (Wajib untuk isi item):</label>
+                                <input type="text" id="i_quoteRef" placeholder="Ketik ID Quotation (Misal: QT2310-0001)" class="border p-2 rounded w-full">
+                            </div>
+                            <button onclick="loadQuoteIntoInvoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-bold h-[42px]">Tarik Data Item</button>
+                        </div>
+
+                        <div class="mb-4">
+                            <h3 class="font-bold mb-2">Item Invoice:</h3>
+                            <table class="w-full text-left border-collapse border bg-white mb-2">
+                                <thead><tr class="bg-gray-200"><th class="p-2 border">Deskripsi Jasa / Barang</th><th class="p-2 border text-right">Harga</th></tr></thead>
+                                <tbody id="i_tableBody"><tr><td colspan="2" class="p-2 text-center text-gray-400">Belum ada item ditarik dari Quotation</td></tr></tbody>
+                            </table>
+                            <div class="text-right font-bold text-gray-700 mb-4">SubTotal: Rp <span id="i_subTotal">0</span></div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 bg-gray-50 p-4 rounded border">
+                            <div>
+                                <label class="block font-bold text-sm mb-2">Pengaturan Pajak:</label>
+                                <label class="flex items-center mb-2 cursor-pointer"><input type="checkbox" id="i_ppn" class="mr-2 w-4 h-4" onchange="calculateInvoice()"> Tambah PPN 11%</label>
+                                <label class="flex items-center cursor-pointer"><input type="checkbox" id="i_pph23" class="mr-2 w-4 h-4" onchange="calculateInvoice()"> Potong PPh23 2%</label>
+                            </div>
+                            <div>
+                                <label class="block font-bold text-sm mb-2">Pilih Rekening Pembayaran:</label>
+                                <!-- DROPDOWN BANK DINAMIS -->
+                                <select id="i_bank" class="border p-2 rounded w-full bg-white">
+                                    <option value="">-- Sedang memuat rekening... --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block font-bold text-sm mb-1">Catatan (Termin, Cara Pembayaran, dll):</label>
+                            <textarea id="i_notes" class="border p-2 rounded w-full" rows="2" placeholder="Harap transfer sesuai nominal yang tertera..."></textarea>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block font-bold text-sm mb-1">Upload Bukti Pekerjaan (Opsional):</label>
+                            <input type="file" id="i_file" class="border p-2 rounded w-full bg-white">
+                        </div>
+
+                        <div class="text-right font-bold text-3xl mb-6 text-indigo-700 border-b pb-4">
+                            GRAND TOTAL: Rp <span id="i_grandTotal">0</span>
+                        </div>
+
+                        <button onclick="generateInvoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded w-full font-bold text-lg">Simpan & Terbitkan Invoice</button>
+                    </div>
+
+                    <!-- History Invoice -->
+                    <div class="bg-white p-6 rounded shadow-sm border">
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                            <h2 class="text-xl font-bold text-gray-700">History Invoice</h2>
+                            <button onclick="fetchHistory('invoice')" class="text-sm bg-gray-200 px-3 py-1 rounded hover:bg-gray-300 font-bold">Refresh Data</button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse min-w-max">
+                                <thead>
+                                    <tr class="bg-indigo-50 border-b">
+                                        <th class="p-2">Inv ID</th>
+                                        <th class="p-2">Quote Ref</th>
+                                        <th class="p-2">Tanggal</th>
+                                        <th class="p-2 text-right">Total</th>
+                                        <th class="p-2 text-center">Akses Publik & PIN</th>
+                                        <th class="p-2 text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history_invoiceBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PDF PREVIEW -->
+    <div id="pdfModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-50 overflow-y-auto">
+        <div class="min-h-screen flex items-center justify-center p-4">
+            <div class="bg-gray-200 rounded-lg shadow-2xl max-w-5xl w-full flex flex-col">
+                <!-- Modal Header -->
+                <div class="bg-gray-800 text-white p-4 rounded-t-lg flex justify-between items-center sticky top-0 z-10">
+                    <h3 class="text-xl font-bold" id="modalTitle">Preview Dokumen</h3>
+                    <div class="space-x-2">
+                        <button onclick="downloadActivePDF()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-bold shadow">Download PDF</button>
+                        <button onclick="closePDFModal()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded font-bold">Tutup</button>
+                    </div>
+                </div>
+                <!-- Tempat Render PDF Asli (Berlatar Putih ukuran A4) -->
+                <div class="p-8 overflow-auto flex justify-center bg-gray-300">
+                    <div id="pdfRenderArea" class="bg-white p-10 shadow-lg w-[210mm] min-h-[297mm] relative text-gray-900">
+                        <!-- Konten di-inject dari JS -->
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script>
-        // ==========================================
-        // KONFIGURASI FRONTEND
-        // ==========================================
-        // GANTI URL DI BAWAH INI DENGAN URL WEB APP APPS SCRIPT ANDA
-        const API_URL = "https://script.google.com/macros/s/AKfycbwkXo-QvX9KU-LPBXU6bbBukUdKMHycrWy0CI9K-Hkl6lxbQs2nN-OE5h9n4GFirimF/exec"; 
-
-        // State Management
-        let masterItems = [];
-        let quoteItems = [];
-        let quoteTotal = 0;
-
-        // Cek apakah mode Public View
-        const urlParams = new URLSearchParams(window.location.search);
-        const viewDocId = urlParams.get('doc');
-
-        if(viewDocId) {
-            document.getElementById('publicViewArea').classList.remove('hidden');
-        } else {
-            document.getElementById('adminArea').classList.remove('hidden');
-            if(localStorage.getItem('token')) {
-                document.getElementById('loginScreen').classList.add('hidden');
-                document.getElementById('dashboardScreen').classList.remove('hidden');
-                showPage('master');
-            }
-        }
-
-        // --- CORE FUNCTIONS ---
-
-        function callAPI(action, data) {
-            document.getElementById('loading').classList.remove('hidden');
-            return fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action: action, data: data }),
-                // Jika error CORS, API App Script dikonfigurasi menggunakan redirect following
-            }).then(res => res.json())
-              .finally(() => document.getElementById('loading').classList.add('hidden'));
-        }
-
-        function login() {
-            const u = document.getElementById('username').value;
-            const p = document.getElementById('password').value;
-            callAPI('login', {username: u, password: p}).then(res => {
-                if(res.status === 'success') {
-                    localStorage.setItem('token', res.data.token);
-                    document.getElementById('loginScreen').classList.add('hidden');
-                    document.getElementById('dashboardScreen').classList.remove('hidden');
-                    showPage('master');
-                } else alert('Login Gagal!');
-            });
-        }
-
-        function logout() {
-            localStorage.removeItem('token');
-            location.reload();
-        }
-
-        function showPage(pageId) {
-            document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
-            document.getElementById('page-' + pageId).classList.remove('hidden');
-        }
-
-        // --- MASTER DATA ---
-
-        function saveMasterItem() {
-            const data = {
-                mainCat: document.getElementById('m_mainCat').value,
-                subCat: document.getElementById('m_subCat').value,
-                name: document.getElementById('m_name').value,
-                price: document.getElementById('m_price').value
-            };
-            callAPI('saveItem', data).then(res => {
-                alert('Item tersimpan dengan ID: ' + res.data.id);
-                document.querySelectorAll('#page-master input').forEach(i => i.value='');
-            });
-        }
-
-        function fetchMasterItems() {
-            callAPI('getItems', {}).then(res => {
-                masterItems = res.data;
-                const sel = document.getElementById('q_itemSelect');
-                sel.innerHTML = '';
-                masterItems.forEach(item => {
-                    sel.innerHTML += `<option value="${item.ItemID}">${item.Name} - Rp ${item.Price}</option>`;
-                });
-            });
-        }
-
-        // --- QUOTATION ---
-
-        function addQuoteItem() {
-            const itemId = document.getElementById('q_itemSelect').value;
-            const item = masterItems.find(i => i.ItemID === itemId);
-            if(item) {
-                quoteItems.push(item);
-                renderQuoteTable();
-            }
-        }
-
-        function renderQuoteTable() {
-            const tbody = document.getElementById('q_tableBody');
-            tbody.innerHTML = '';
-            quoteTotal = 0;
-            quoteItems.forEach((itm, index) => {
-                quoteTotal += parseInt(itm.Price);
-                tbody.innerHTML += `<tr>
-                    <td class="p-2 border-b">${itm.Name}</td>
-                    <td class="p-2 border-b">Rp ${parseInt(itm.Price).toLocaleString('id-ID')}</td>
-                    <td class="p-2 border-b"><button onclick="quoteItems.splice(${index},1); renderQuoteTable()" class="text-red-500 text-sm">Hapus</button></td>
-                </tr>`;
-            });
-            document.getElementById('q_total').innerText = quoteTotal.toLocaleString('id-ID');
-        }
-
-        function generateQuotation() {
-            const data = {
-                toName: document.getElementById('q_to').value,
-                phone: document.getElementById('q_phone').value,
-                address: document.getElementById('q_address').value,
-                items: quoteItems,
-                total: quoteTotal
-            };
-            callAPI('saveQuotation', data).then(res => {
-                alert('Quotation Sukses dibuat! ID: ' + res.data.id);
-                // Reset form
-                quoteItems = []; renderQuoteTable();
-            });
-        }
-
-        // --- INVOICE & PDF ---
-
-        // Helper File to Base64
-        function getBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result.split(',')[1]); // remove data:image/...;base64,
-                reader.onerror = error => reject(error);
-            });
-        }
-
-        async function generateInvoice() {
-            const quoteRef = document.getElementById('i_quoteRef').value;
-            const isPPN = document.getElementById('i_ppn').checked;
-            const isPPh = document.getElementById('i_pph23').checked;
-            const bank = document.getElementById('i_bank').value;
-            const notes = document.getElementById('i_notes').value;
-            const fileInput = document.getElementById('i_file').files[0];
-
-            // Simulasi get data items dari QuoteRef (Di sistem nyata API call ke backend untuk get data QT)
-            // Di sini kita pakai mock items untuk demo
-            const dummyItems = [{Name: "Jasa Pembuatan Website", Price: 5000000}];
-            let sub = 5000000;
-            let taxPPN = isPPN ? sub * 0.11 : 0;
-            let taxPPh = isPPh ? sub * 0.02 : 0;
-            let grandTotal = sub + taxPPN - taxPPh;
-
-            const data = {
-                quoteId: quoteRef, items: dummyItems, subTotal: sub, 
-                taxPPN: taxPPN, taxPPh: taxPPh, total: grandTotal, 
-                bankId: bank, notes: notes
-            };
-
-            const res = await callAPI('saveInvoice', data);
-            
-            // Upload File Jika Ada
-            if(fileInput) {
-                const b64 = await getBase64(fileInput);
-                await callAPI('uploadFile', {
-                    refId: res.data.id, filename: fileInput.name, 
-                    mimeType: fileInput.type, base64: b64
-                });
-            }
-
-            renderPDFTemplate(res.data.id, res.data.pin, dummyItems, sub, taxPPN, taxPPh, grandTotal, notes, bank);
-        }
-
-        function renderPDFTemplate(invId, pin, items, sub, ppn, pph, total, notes, bank) {
-            document.getElementById('pdfTemplate').classList.remove('hidden');
-            document.getElementById('pdf_invID').innerText = invId;
-            
-            let html = `<table class="w-full text-left mt-6 mb-6">
-                <tr class="bg-indigo-100"><th class="p-2">Deskripsi</th><th class="p-2 text-right">Jumlah</th></tr>`;
-            items.forEach(i => {
-                html += `<tr><td class="p-2 border-b">${i.Name}</td><td class="p-2 border-b text-right">Rp ${i.Price.toLocaleString('id-ID')}</td></tr>`;
-            });
-            html += `</table>
-                <div class="flex justify-end mt-4">
-                    <div class="w-64 text-right">
-                        <div class="flex justify-between mb-1"><span>SubTotal:</span> <span>Rp ${sub.toLocaleString('id-ID')}</span></div>
-                        ${ppn > 0 ? `<div class="flex justify-between mb-1"><span>PPN (11%):</span> <span>Rp ${ppn.toLocaleString('id-ID')}</span></div>` : ''}
-                        ${pph > 0 ? `<div class="flex justify-between mb-1 text-red-600"><span>PPh23 (2%):</span> <span>- Rp ${pph.toLocaleString('id-ID')}</span></div>` : ''}
-                        <div class="flex justify-between mt-2 pt-2 border-t font-bold text-lg"><span>TOTAL:</span> <span>Rp ${total.toLocaleString('id-ID')}</span></div>
-                    </div>
-                </div>
-                <div class="mt-8 border p-4 bg-gray-50">
-                    <p class="font-bold">Informasi Pembayaran:</p>
-                    <p>Transfer ke: ${bank}</p>
-                    <p>Catatan: ${notes}</p>
-                </div>`;
-            
-            document.getElementById('pdf_content').innerHTML = html;
-            
-            // Generate Public Link
-            const publicUrl = window.location.origin + window.location.pathname + "?doc=" + invId;
-            document.getElementById('publicLinkArea').innerHTML = `
-                <p class="font-bold">Link Publik Klien:</p>
-                <a href="${publicUrl}" target="_blank" class="text-blue-600 underline">${publicUrl}</a>
-                <p class="mt-1">KODE PIN AKSES: <span class="font-bold text-2xl text-green-700 tracking-widest">${pin}</span></p>
-            `;
-        }
-
-        // Generate A4 PDF menggunakan html2pdf
-        function downloadPDF(elementId, filename) {
-            const element = document.getElementById(elementId);
-            const opt = {
-                margin:       10,
-                filename:     filename + '.pdf',
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2 },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
-            html2pdf().set(opt).from(element).save();
-        }
-
-        // --- PUBLIC VIEW LOGIC ---
-        function unlockPublicDoc() {
-            const pin = document.getElementById('publicPin').value;
-            callAPI('publicView', { docId: viewDocId, pin: pin }).then(res => {
-                if(res.status === 'success') {
-                    document.getElementById('pinForm').classList.add('hidden');
-                    document.getElementById('publicDocContent').classList.remove('hidden');
-                    
-                    const data = res.data;
-                    const items = JSON.parse(data.ItemsJSON);
-                    
-                    // Render HTML u/ Public View mirip dengan fungsi renderPDFTemplate
-                    document.getElementById('renderedPublicDoc').innerHTML = `
-                        <h1 class="text-3xl font-bold mb-4">INVOICE: ${data.InvID}</h1>
-                        <p>Tanggal: ${data.Date.substring(0,10)}</p>
-                        <!-- Iterasi tabel item dari 'items' -->
-                        <div class="mt-4 p-4 bg-gray-100 rounded">
-                            <h2 class="text-2xl font-bold">TOTAL: Rp ${data.Total.toLocaleString('id-ID')}</h2>
-                            <p class="mt-2">Catatan: ${data.Notes}</p>
-                        </div>
-                    `;
-                } else {
-                    alert('PIN Salah atau Dokumen tidak ditemukan!');
-                }
-            });
-        }
-        // ==========================================
-        // FITUR HISTORY TRANSAKSI
-        // ==========================================
-        let historyInvoices = [];
-        let historyQuotes = [];
-
-        function fetchHistory() {
-            // Tampilkan tabel loading state
-            document.getElementById('h_invoiceBody').innerHTML = '<tr><td colspan="5" class="text-center p-4">Memuat data Invoice...</td></tr>';
-            document.getElementById('h_quoteBody').innerHTML = '<tr><td colspan="5" class="text-center p-4">Memuat data Quotation...</td></tr>';
-
-            Promise.all([
-                callAPI('getInvoices', {}),
-                callAPI('getQuotations', {})
-            ]).then(([resInv, resQuote]) => {
-                if(resInv.status === 'success') renderInvoicesHistory(resInv.data);
-                if(resQuote.status === 'success') renderQuotesHistory(resQuote.data);
-            });
-        }
-
-        function renderInvoicesHistory(invoices) {
-            historyInvoices = invoices.slice().reverse(); // Balik urutan agar yang terbaru di atas
-            const tbody = document.getElementById('h_invoiceBody');
-            tbody.innerHTML = '';
-            
-            if(historyInvoices.length === 0) tbody.innerHTML = '<tr><td colspan="5" class="text-center p-4">Belum ada Invoice</td></tr>';
-
-            historyInvoices.forEach((inv, index) => {
-                const publicUrl = window.location.origin + window.location.pathname + "?doc=" + inv.InvID;
-                tbody.innerHTML += `
-                    <tr class="border-b hover:bg-gray-50">
-                        <td class="p-2 font-bold">${inv.InvID}</td>
-                        <td class="p-2 text-sm">${new Date(inv.Date).toLocaleDateString('id-ID')}</td>
-                        <td class="p-2 font-bold text-green-700">Rp ${parseInt(inv.Total).toLocaleString('id-ID')}</td>
-                        <td class="p-2">
-                            <div class="flex items-center gap-2">
-                                <span class="font-mono bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-bold border">PIN: ${inv.ViewCode}</span>
-                                <a href="${publicUrl}" target="_blank" class="text-blue-600 underline text-sm">Buka Link</a>
-                                <button onclick="navigator.clipboard.writeText('${publicUrl}')" class="bg-gray-200 px-2 py-1 rounded text-xs hover:bg-gray-300">Copy Link</button>
-                            </div>
-                        </td>
-                        <td class="p-2 text-center">
-                            <button onclick="reprintInvoice(${index})" class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700">Lihat PDF</button>
-                        </td>
-                    </tr>
-                `;
-            });
-        }
-
-        function renderQuotesHistory(quotes) {
-            historyQuotes = quotes.slice().reverse();
-            const tbody = document.getElementById('h_quoteBody');
-            tbody.innerHTML = '';
-            
-            if(historyQuotes.length === 0) tbody.innerHTML = '<tr><td colspan="5" class="text-center p-4">Belum ada Quotation</td></tr>';
-
-            historyQuotes.forEach((q, index) => {
-                tbody.innerHTML += `
-                    <tr class="border-b hover:bg-gray-50">
-                        <td class="p-2 font-bold">${q.QuoteID}</td>
-                        <td class="p-2">${q.ToName}</td>
-                        <td class="p-2 text-sm">${new Date(q.Date).toLocaleDateString('id-ID')}</td>
-                        <td class="p-2 font-bold text-blue-700">Rp ${parseInt(q.Total).toLocaleString('id-ID')}</td>
-                        <td class="p-2 text-center">
-                            <button onclick="reprintQuote(${index})" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">Lihat PDF</button>
-                        </td>
-                    </tr>
-                `;
-            });
-        }
-
-        // Fungsi mencetak ulang Invoice (Memanggil template yg sudah ada)
-        function reprintInvoice(index) {
-            const inv = historyInvoices[index];
-            const items = JSON.parse(inv.ItemsJSON || '[]');
-            
-            renderPDFTemplate(inv.InvID, inv.ViewCode, items, parseInt(inv.SubTotal), parseInt(inv.TaxPPN), parseInt(inv.TaxPPh), parseInt(inv.Total), inv.Notes, inv.BankID);
-            
-            showPage('invoice');
-            setTimeout(() => {
-                document.getElementById('pdfTemplate').scrollIntoView({ behavior: 'smooth' });
-            }, 100);
-        }
-
-        // Fungsi mendesain dan mencetak ulang Quotation 
-        function reprintQuote(index) {
-            const q = historyQuotes[index];
-            const items = JSON.parse(q.ItemsJSON || '[]');
-            
-            // Inject desain khusus Quotation ke dalam wadah PDF
-            document.getElementById('pdfTemplate').classList.remove('hidden');
-            document.getElementById('pdfTemplate').innerHTML = `
-                <div class="flex justify-between items-start mb-8">
-                    <div>
-                        <h1 class="text-4xl font-bold text-blue-800">QUOTATION</h1>
-                        <p class="text-gray-600 mt-2 text-lg font-bold">${q.QuoteID}</p>
-                        <div class="mt-4">
-                            <p class="text-sm text-gray-500">Tertuju Kepada:</p>
-                            <p class="font-bold">${q.ToName}</p>
-                            <p>${q.Phone}</p>
-                            <p class="whitespace-pre-line text-sm">${q.Address}</p>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <h2 class="font-bold">Perusahaan Anda</h2>
-                        <p class="text-sm">Jl. Contoh Web Bisnis No. 1<br>Jakarta, Indonesia</p>
-                        <p class="text-sm mt-2 text-gray-500">Tanggal Terbit: ${new Date(q.Date).toLocaleDateString('id-ID')}</p>
-                    </div>
-                </div>
-                
-                <table class="w-full text-left mt-6 mb-6 border">
-                    <tr class="bg-blue-100"><th class="p-2 border">Deskripsi Item / Jasa</th><th class="p-2 border text-right w-48">Harga</th></tr>
-                    ${items.map(i => `<tr><td class="p-2 border-b border-x">${i.Name}</td><td class="p-2 border-b border-x text-right">Rp ${parseInt(i.Price).toLocaleString('id-ID')}</td></tr>`).join('')}
-                </table>
-                
-                <div class="flex justify-end mt-4 text-xl font-bold border-b pb-4">
-                    TOTAL BIAYA: Rp ${parseInt(q.Total).toLocaleString('id-ID')}
-                </div>
-                
-                <div class="mt-8">
-                    <button onclick="downloadPDF('pdfTemplate', 'Quotation_${q.QuoteID}')" class="bg-red-600 text-white px-4 py-2 rounded print:hidden">Download PDF Quotation</button>
-                </div>
-            `;
-            
-            // Tampilkan di layar dengan mengarahkan ke tab invoice (sebagai canvas)
-            showPage('invoice'); 
-            setTimeout(() => {
-                document.getElementById('pdfTemplate').scrollIntoView({ behavior: 'smooth' });
-            }, 100);
-        }
-    </script>
+    <script src="javascript.js"></script>
 </body>
 </html>
