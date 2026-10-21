@@ -225,8 +225,9 @@ function calculateInvoice() {
     const isPPN = document.getElementById('i_ppn').checked;
     const isPPh = document.getElementById('i_pph23').checked;
     
-    invTaxPPN = isPPN ? invSubTotal * 0.11 : 0;
-    invTaxPPh = isPPh ? invSubTotal * 0.02 : 0;
+    // Menggunakan Math.round agar tidak ada bilangan desimal pada hasil persentase pajak
+    invTaxPPN = isPPN ? Math.round(invSubTotal * 0.11) : 0;
+    invTaxPPh = isPPh ? Math.round(invSubTotal * 0.02) : 0;
     invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
     
     document.getElementById('i_grandTotal').innerText = formatRupiah(invGrandTotal);
@@ -460,16 +461,21 @@ function closePDFModal() {
     document.getElementById('pdfModal').classList.add('hidden');
 }
 
-function downloadActivePDF() {
-    const element = document.getElementById('pdfRenderArea');
+// Fungsi untuk download PDF ditambahkan di sini (Perbaikan BUG FATAL)
+function downloadPDF(elementId, fileName) {
+    const element = document.getElementById(elementId);
     const opt = {
         margin:       0,
-        filename:     activeDocName + '.pdf',
+        filename:     fileName + '.pdf',
         image:        { type: 'jpeg', quality: 1 },
         html2canvas:  { scale: 2, useCORS: true },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     html2pdf().set(opt).from(element).save();
+}
+
+function downloadActivePDF() {
+    downloadPDF('pdfRenderArea', activeDocName);
 }
 
 // --- PUBLIC VIEW (KLIEN) LOGIC ---
