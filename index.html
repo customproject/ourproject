@@ -49,10 +49,13 @@
             <nav class="bg-blue-800 text-white p-4 shadow-md flex justify-between print:hidden">
                 <div class="font-bold text-xl">Sistem Bisnis</div>
                 <div class="space-x-4">
-                    <button onclick="showPage('master')">Master Item</button>
-                    <button onclick="showPage('quote')">Quotation</button>
-                    <button onclick="showPage('invoice')">Invoice</button>
-                    <button onclick="logout()" class="text-red-300">Logout</button>
+                    <button onclick="showPage('master')" class="hover:text-gray-300">Master Item</button>
+                    <button onclick="showPage('quote')" class="hover:text-gray-300">Quotation</button>
+                    <button onclick="showPage('invoice')" class="hover:text-gray-300">Invoice</button>
+                    <!-- 👇 TOMBOL BARU 👇 -->
+                    <button onclick="showPage('history'); fetchHistory();" class="hover:text-gray-300 font-bold text-yellow-300">History</button>
+                    
+                    <button onclick="logout()" class="text-red-300 hover:text-red-100 ml-4">Logout</button>
                 </div>
             </nav>
 
@@ -151,7 +154,52 @@
                         </div>
                     </div>
                 </div>
+                <!-- PAGE: HISTORY TRANSAKSI -->
+                <div id="page-history" class="page-content hidden bg-white p-6 rounded shadow">
+                    <h2 class="text-2xl font-bold mb-6 border-b pb-2">History Transaksi</h2>
+                    
+                    <!-- TABEL INVOICE -->
+                    <div class="mb-8">
+                        <h3 class="font-bold text-lg mb-3 text-indigo-700">Daftar Invoice Terbit</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse min-w-max">
+                                <thead>
+                                    <tr class="bg-indigo-100 border-b">
+                                        <th class="p-2">Inv ID</th>
+                                        <th class="p-2">Tanggal</th>
+                                        <th class="p-2">Total</th>
+                                        <th class="p-2">Akses Publik & PIN</th>
+                                        <th class="p-2 text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="h_invoiceBody">
+                                    <tr><td colspan="5" class="text-center p-4">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
+                    <!-- TABEL QUOTATION -->
+                    <div>
+                        <h3 class="font-bold text-lg mb-3 text-blue-700">Daftar Quotation</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse min-w-max">
+                                <thead>
+                                    <tr class="bg-blue-100 border-b">
+                                        <th class="p-2">Quote ID</th>
+                                        <th class="p-2">Klien (Tertuju)</th>
+                                        <th class="p-2">Tanggal</th>
+                                        <th class="p-2">Total</th>
+                                        <th class="p-2 text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="h_quoteBody">
+                                    <tr><td colspan="5" class="text-center p-4">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
