@@ -2,7 +2,7 @@
 // KONFIGURASI FRONTEND
 // ==========================================
 // PASTE URL DEPLOYMENT APPS SCRIPT ANDA DI SINI:
-const API_URL = "https://script.google.com/macros/s/AKfycbzxxxxxxxxx/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbwkXo-QvX9KU-LPBXU6bbBukUdKMHycrWy0CI9K-Hkl6lxbQs2nN-OE5h9n4GFirimF/exec"; 
 
 // State Application
 let masterItems = [];
