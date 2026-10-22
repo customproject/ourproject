@@ -6,7 +6,7 @@ let quoteItems = [];
 let invoiceItems = []; 
 let historyQuotes = [];
 let historyInvoices = [];
-let activeSenderInfo = null; // Menyimpan info perusahaan untuk Invoice
+let activeSenderInfo = null;
 
 let invSubTotal = 0;
 let invTaxPPN = 0;
@@ -27,6 +27,7 @@ if (viewDocId) {
     }
 }
 
+// Fungsi Call API Diperbarui untuk Catch Error Server-Side
 function callAPI(action, data) {
     document.getElementById('loading').classList.remove('hidden');
     return fetch(API_URL, {
@@ -58,8 +59,12 @@ function showPage(pageId) {
     document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('page-' + pageId).classList.remove('hidden');
     
-    if (pageId === 'quote') fetchHistory('quote');
+    if (pageId === 'quote') {
+        fetchHistory('quote');
+    }
     if (pageId === 'invoice') {
+        // Penting: Tarik data history quote lagi agar Dropdown Quotation di Invoice ter-isi
+        fetchHistory('quote'); 
         fetchHistory('invoice');
         fetchBanks(); 
     }
@@ -80,6 +85,7 @@ function saveMasterItem() {
     if(!data.name || !data.price) return alert("Nama dan Harga wajib diisi!");
     
     callAPI('saveItem', data).then(res => {
+        if(res.status === 'error') return alert("Error: " + res.message);
         alert('Item tersimpan dengan ID: ' + res.data.id);
         document.querySelectorAll('#page-master input').forEach(i => i.value='');
     });
@@ -87,12 +93,14 @@ function saveMasterItem() {
 
 function fetchMasterItems() {
     callAPI('getItems', {}).then(res => {
-        masterItems = res.data;
-        const sel = document.getElementById('q_itemSelect');
-        sel.innerHTML = '';
-        masterItems.forEach(item => {
-            sel.innerHTML += `<option value="${item.ItemID}">${item.Name} - Rp ${formatRupiah(item.Price)}</option>`;
-        });
+        if(res.status === 'success') {
+            masterItems = res.data;
+            const sel = document.getElementById('q_itemSelect');
+            sel.innerHTML = '';
+            masterItems.forEach(item => {
+                sel.innerHTML += `<option value="${item.ItemID}">${item.Name} - Rp ${formatRupiah(item.Price)}</option>`;
+            });
+        }
     });
 }
 
@@ -113,7 +121,6 @@ function fetchBanks() {
 // --- QUOTATION LOGIC ---
 function addQuoteItem() {
     const itemId = document.getElementById('q_itemSelect').value;
-    // Menggunakan parseFloat agar menerima desimal
     const qty = parseFloat(document.getElementById('q_qty').value) || 1;
     const ket = document.getElementById('q_ket').value || '';
     const item = masterItems.find(i => i.ItemID === itemId);
@@ -123,7 +130,6 @@ function addQuoteItem() {
             ...item, 
             Qty: qty, 
             Keterangan: ket, 
-            // Dibulatkan agar tidak ada koma rupiah (Total per item)
             Total: Math.round(parseFloat(item.Price) * qty) 
         };
         quoteItems.push(newItem);
@@ -172,7 +178,6 @@ function generateQuotation() {
         phone: document.getElementById('q_phone').value,
         address: document.getElementById('q_address').value,
         desc: document.getElementById('q_desc').value,
-        // Kita bungkus items & identitas dalam satu objek agar tidak mengganggu kolom spreadsheet
         items: {
             itemsList: quoteItems,
             senderInfo: senderData
@@ -181,6 +186,8 @@ function generateQuotation() {
     };
 
     callAPI('saveQuotation', data).then(res => {
+        if(res.status === 'error') return alert("Gagal menyimpan Quotation: " + res.message);
+        
         alert('Quotation Sukses dibuat! ID: ' + res.data.id);
         
         quoteItems = []; renderQuoteTable(); 
@@ -197,15 +204,26 @@ function generateQuotation() {
     });
 }
 
-// --- INVOICE LOGIC ---
+
+// --- INVOICE LOGIC & QUOTATION DROPDOWN ---
+function populateQuoteDropdown() {
+    const select = document.getElementById('i_quoteRef');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">-- Pilih Quotation ID --</option>';
+    historyQuotes.forEach(q => {
+        // Format Teks Dropdown Sesuai Permintaan
+        select.innerHTML += `<option value="${q.QuoteID}">${q.QuoteID} | ${q.ToName} | Rp ${formatRupiah(q.Total)}</option>`;
+    });
+}
+
 function loadQuoteIntoInvoice() {
-    const qID = document.getElementById('i_quoteRef').value.trim();
-    if(!qID) return alert("Masukkan ID Quotation terlebih dahulu.");
+    const qID = document.getElementById('i_quoteRef').value;
+    if(!qID) return; // Ignore jika dropdown memilih option kosong
     
     const quote = historyQuotes.find(q => q.QuoteID === qID);
     if(quote) {
         let parsed = JSON.parse(quote.ItemsJSON || '[]');
-        // Pengecekan kompatibilitas format lama (array) vs format baru (objek berbungkus)
         if (Array.isArray(parsed)) {
             invoiceItems = parsed;
             activeSenderInfo = { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' };
@@ -215,9 +233,10 @@ function loadQuoteIntoInvoice() {
         }
         
         renderInvoiceTable();
-        alert(`Data item dari ${qID} berhasil ditarik.`);
+        // Feedback ringan tanpa memutus workflow (karena dropdown otomatis load)
+        console.log(`Data item dari ${qID} berhasil ditarik.`);
     } else {
-        alert(`Quotation ${qID} tidak ditemukan. Harap direfresh terlebih dahulu.`);
+        alert(`Quotation ${qID} tidak ditemukan di sistem. Harap direfresh.`);
     }
 }
 
@@ -279,50 +298,64 @@ function getBase64(file) {
 }
 
 async function generateInvoice() {
-    const quoteRef = document.getElementById('i_quoteRef').value;
-    if(invoiceItems.length === 0) return alert('Tarik data dari Quotation terlebih dahulu!');
-    
-    const bank = document.getElementById('i_bank').value;
-    if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
+    try {
+        const quoteRef = document.getElementById('i_quoteRef').value;
+        if(invoiceItems.length === 0) return alert('Pilih dan tarik data dari Quotation terlebih dahulu!');
+        
+        const bank = document.getElementById('i_bank').value;
+        if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
 
-    const notes = document.getElementById('i_notes').value;
-    const fileInput = document.getElementById('i_file').files[0];
+        const notes = document.getElementById('i_notes').value;
+        
+        // Membaca file dengan aman (Mencegah null crash)
+        const fileElement = document.getElementById('i_file');
+        const fileInput = (fileElement && fileElement.files) ? fileElement.files[0] : null;
 
-    const data = {
-        quoteId: quoteRef, 
-        // Membungkus kembali data info sender untuk Invoice
-        items: {
-            itemsList: invoiceItems,
-            senderInfo: activeSenderInfo
-        }, 
-        subTotal: invSubTotal, taxPPN: invTaxPPN, taxPPh: invTaxPPh, total: invGrandTotal, 
-        bankId: bank, notes: notes
-    };
+        const data = {
+            quoteId: quoteRef, 
+            items: {
+                itemsList: invoiceItems,
+                senderInfo: activeSenderInfo
+            }, 
+            subTotal: invSubTotal, taxPPN: invTaxPPN, taxPPh: invTaxPPh, total: invGrandTotal, 
+            bankId: bank, notes: notes
+        };
 
-    const res = await callAPI('saveInvoice', data);
-    
-    if(fileInput) {
-        const b64 = await getBase64(fileInput);
-        await callAPI('uploadFile', {
-            refId: res.data.id, filename: fileInput.name, mimeType: fileInput.type, base64: b64
-        });
+        const res = await callAPI('saveInvoice', data);
+        
+        // Cek Keberhasilan Save Data di GAS
+        if(res.status === 'error') {
+            throw new Error(res.message); 
+        }
+        
+        if(fileInput) {
+            const b64 = await getBase64(fileInput);
+            await callAPI('uploadFile', {
+                refId: res.data.id, filename: fileInput.name, mimeType: fileInput.type, base64: b64
+            });
+        }
+
+        alert('Invoice Sukses Dibuat! PIN Akses: ' + res.data.pin);
+        fetchHistory('invoice'); 
+        
+        const previewData = {
+            InvID: res.data.id, Date: new Date().toISOString(), ViewCode: res.data.pin,
+            SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
+            Notes: notes, BankID: bank
+        };
+        buildInvoicePDF(previewData, invoiceItems, activeSenderInfo);
+        
+        // Reset form
+        document.getElementById('i_quoteRef').value = '';
+        invoiceItems = []; renderInvoiceTable();
+        document.getElementById('i_notes').value = '';
+        if(fileElement) fileElement.value = '';
+        document.getElementById('i_pph_status').value = 'none';
+
+    } catch (error) {
+        console.error("Invoice Error: ", error);
+        alert("Terjadi kesalahan saat memproses data: " + error.message);
     }
-
-    alert('Invoice Sukses Dibuat! PIN Akses: ' + res.data.pin);
-    fetchHistory('invoice'); 
-    
-    const previewData = {
-        InvID: res.data.id, Date: new Date().toISOString(), ViewCode: res.data.pin,
-        SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
-        Notes: notes, BankID: bank
-    };
-    buildInvoicePDF(previewData, invoiceItems, activeSenderInfo);
-    
-    document.getElementById('i_quoteRef').value = '';
-    invoiceItems = []; renderInvoiceTable();
-    document.getElementById('i_notes').value = '';
-    document.getElementById('i_file').value = '';
-    document.getElementById('i_pph_status').value = 'none';
 }
 
 // --- HISTORY FETCHING & RENDERING ---
@@ -347,6 +380,9 @@ function fetchHistory(type) {
                         </td>
                     </tr>`;
                 });
+
+                // Update List Dropdown di form Invoice
+                populateQuoteDropdown();
             }
         });
     }

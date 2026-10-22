@@ -72,7 +72,6 @@
                     <div class="bg-white p-6 rounded shadow-sm border mb-8 border-t-4 border-blue-500">
                         <h2 class="text-xl font-bold mb-4 text-blue-800">Buat Quotation Baru</h2>
                         
-                        <!-- DATA PENGIRIM DINAMIS -->
                         <div class="mb-6 bg-gray-50 p-4 rounded border border-gray-200">
                             <h3 class="font-bold mb-2 text-sm text-gray-700">Identitas Pengirim (Bisnis Anda):</h3>
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -94,7 +93,6 @@
                             <div class="flex gap-2 mb-4 flex-wrap">
                                 <button onclick="fetchMasterItems()" class="bg-gray-800 text-white px-3 py-2 rounded text-sm hover:bg-gray-700">Load Master Data</button>
                                 <select id="q_itemSelect" class="border p-2 rounded flex-1 min-w-[200px]"></select>
-                                <!-- QTY Desimal ditambahkan (step="any") -->
                                 <input type="number" id="q_qty" placeholder="Qty" value="1" step="any" min="0.01" class="border p-2 rounded w-20 text-center">
                                 <input type="text" id="q_ket" placeholder="Keterangan (Opsional)" class="border p-2 rounded w-48">
                                 <button onclick="addQuoteItem()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold">Tambah</button>
@@ -152,14 +150,17 @@
                         
                         <div class="mb-6 p-4 border border-indigo-200 rounded bg-indigo-50 flex gap-2 items-end">
                             <div class="flex-1">
-                                <label class="block font-bold text-sm mb-1 text-indigo-900">Tarik Data dari Quotation (Wajib untuk isi item):</label>
-                                <input type="text" id="i_quoteRef" placeholder="Ketik ID Quotation (Misal: QT2310-0001)" class="border p-2 rounded w-full">
+                                <label class="block font-bold text-sm mb-1 text-indigo-900">Tarik Data dari History Quotation:</label>
+                                <!-- DROPDOWN PENGGANTI INPUT MANUAL -->
+                                <select id="i_quoteRef" class="border p-2 rounded w-full bg-white text-sm" onchange="loadQuoteIntoInvoice()">
+                                    <option value="">-- Memuat Data Quotation... --</option>
+                                </select>
                             </div>
                             <button onclick="loadQuoteIntoInvoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-bold h-[42px]">Tarik Data Item</button>
                         </div>
 
                         <div class="mb-4 overflow-x-auto">
-                            <h3 class="font-bold mb-2">Item Invoice:</h3>
+                            <h3 class="font-bold mb-2 text-gray-800">Item Invoice:</h3>
                             <table class="w-full text-left border-collapse border bg-white mb-2 text-sm shadow-sm">
                                 <thead>
                                     <tr class="bg-gray-200">
@@ -197,15 +198,22 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="block font-bold text-sm mb-1">Catatan (Termin, Cara Pembayaran, dll):</label>
+                            <label class="block font-bold text-sm mb-1 text-gray-800">Catatan (Termin, Cara Pembayaran, dll):</label>
                             <textarea id="i_notes" class="border p-2 rounded w-full" rows="2" placeholder="Harap transfer sesuai nominal yang tertera..."></textarea>
                         </div>
 
-                        <div class="text-right font-bold text-3xl mb-6 text-indigo-700 border-b pb-4">
+                        <!-- KEMBALINYA FORM UPLOAD BUKTI PEKERJAAN -->
+                        <div class="mb-6 border-t pt-4">
+                            <label class="block font-bold text-sm mb-1 text-gray-800">Upload Bukti Pekerjaan / Penyelesaian (Opsional):</label>
+                            <input type="file" id="i_file" class="border p-2 rounded w-full bg-white cursor-pointer mt-1">
+                            <p class="text-xs text-gray-500 mt-1">Gunakan bila ingin menautkan foto/dokumen ke dalam Invoice.</p>
+                        </div>
+
+                        <div class="text-right font-bold text-3xl mb-6 text-indigo-700 border-b pb-4 mt-6">
                             GRAND TOTAL: Rp <span id="i_grandTotal">0</span>
                         </div>
 
-                        <button onclick="generateInvoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded w-full font-bold text-lg">Simpan & Terbitkan Invoice</button>
+                        <button onclick="generateInvoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded w-full font-bold text-lg shadow-md transition-all">Simpan & Terbitkan Invoice</button>
                     </div>
 
                     <div class="bg-white p-6 rounded shadow-sm border">
