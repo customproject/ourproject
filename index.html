@@ -151,7 +151,6 @@
                         <div class="mb-6 p-4 border border-indigo-200 rounded bg-indigo-50 flex gap-2 items-end">
                             <div class="flex-1">
                                 <label class="block font-bold text-sm mb-1 text-indigo-900">Tarik Data dari History Quotation:</label>
-                                <!-- DROPDOWN PENGGANTI INPUT MANUAL -->
                                 <select id="i_quoteRef" class="border p-2 rounded w-full bg-white text-sm" onchange="loadQuoteIntoInvoice()">
                                     <option value="">-- Memuat Data Quotation... --</option>
                                 </select>
@@ -182,11 +181,14 @@
                                 <label class="block font-bold text-sm mb-2 text-gray-800 border-b pb-1">Pengaturan Pajak:</label>
                                 <label class="flex items-center mb-4 cursor-pointer"><input type="checkbox" id="i_ppn" class="mr-2 w-4 h-4" onchange="calculateInvoice()"> Tambah PPN 11%</label>
                                 
-                                <label class="block font-bold text-sm mb-1 text-gray-800">Status PPh 23 (2%):</label>
+                                <label class="block font-bold text-sm mb-1 text-gray-800">Status PPh (Pajak Penghasilan):</label>
+                                <!-- DROPDOWN PPH DIPERBARUI -->
                                 <select id="i_pph_status" class="border p-2 rounded w-full bg-white text-sm" onchange="calculateInvoice()">
-                                    <option value="none">Tanpa PPh 23</option>
-                                    <option value="dipotong">Dipotong PPh 23 (Mengurangi Total Bersih)</option>
-                                    <option value="ditanggung">Ditanggung Pembeli (Total Bersih Utuh)</option>
+                                    <option value="none">Tanpa PPh</option>
+                                    <option value="dipotong_2">Dipotong PPh 2% (Mengurangi Total Bersih)</option>
+                                    <option value="ditanggung_2">Ditanggung Pembeli PPh 2% (Gross Up)</option>
+                                    <option value="dipotong_25">Dipotong PPh 2.5% (Mengurangi Total Bersih)</option>
+                                    <option value="ditanggung_25">Ditanggung Pembeli PPh 2.5% (Gross Up)</option>
                                 </select>
                             </div>
                             <div>
@@ -202,11 +204,10 @@
                             <textarea id="i_notes" class="border p-2 rounded w-full" rows="2" placeholder="Harap transfer sesuai nominal yang tertera..."></textarea>
                         </div>
 
-                        <!-- KEMBALINYA FORM UPLOAD BUKTI PEKERJAAN -->
                         <div class="mb-6 border-t pt-4">
                             <label class="block font-bold text-sm mb-1 text-gray-800">Upload Bukti Pekerjaan / Penyelesaian (Opsional):</label>
                             <input type="file" id="i_file" class="border p-2 rounded w-full bg-white cursor-pointer mt-1">
-                            <p class="text-xs text-gray-500 mt-1">Gunakan bila ingin menautkan foto/dokumen ke dalam Invoice.</p>
+                            <p class="text-xs text-gray-500 mt-1">Dokumen/Foto ini akan otomatis masuk ke link tautan di dalam PDF Invoice.</p>
                         </div>
 
                         <div class="text-right font-bold text-3xl mb-6 text-indigo-700 border-b pb-4 mt-6">
