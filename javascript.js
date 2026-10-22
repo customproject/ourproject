@@ -12,13 +12,11 @@ let invoiceItems = [];
 let historyQuotes = [];
 let historyInvoices = [];
 
-// Variabel untuk menyimpan State Kalkulasi Invoice
 let invSubTotal = 0;
 let invTaxPPN = 0;
 let invTaxPPh = 0;
 let invGrandTotal = 0;
 
-// Cek Mode Public View saat halaman dimuat
 const urlParams = new URLSearchParams(window.location.search);
 const viewDocId = urlParams.get('doc');
 
@@ -29,12 +27,11 @@ if (viewDocId) {
     if(localStorage.getItem('token')) {
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('dashboardScreen').classList.remove('hidden');
-        showPage('quote'); // Default page saat login
+        showPage('quote');
     }
 }
 
 // --- CORE SYSTEM ---
-
 function callAPI(action, data) {
     document.getElementById('loading').classList.remove('hidden');
     return fetch(API_URL, {
@@ -66,20 +63,19 @@ function showPage(pageId) {
     document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('page-' + pageId).classList.remove('hidden');
     
-    // Auto load data history & banks saat navigasi halaman
     if (pageId === 'quote') fetchHistory('quote');
     if (pageId === 'invoice') {
         fetchHistory('invoice');
-        fetchBanks(); // Load bank rekening dari database spreadsheet
+        fetchBanks(); 
     }
 }
 
-// --- MASTER DATA & HELPER FORMATTER ---
-
 function formatRupiah(angka) {
+    if(!angka || isNaN(angka)) return "0";
     return parseInt(angka).toLocaleString('id-ID');
 }
 
+// --- MASTER DATA ---
 function saveMasterItem() {
     const data = {
         mainCat: document.getElementById('m_mainCat').value,
@@ -112,7 +108,6 @@ function fetchBanks() {
             bankAccounts = res.data;
             const sel = document.getElementById('i_bank');
             sel.innerHTML = '<option value="">-- Pilih Rekening Pembayaran --</option>'; 
-            
             bankAccounts.forEach(bank => {
                 const bankInfo = `${bank.BankName} - ${bank.AccountNo} a/n ${bank.AccountName}`;
                 sel.innerHTML += `<option value="${bankInfo}">${bankInfo}</option>`;
@@ -122,36 +117,55 @@ function fetchBanks() {
 }
 
 // --- QUOTATION LOGIC ---
-
 function addQuoteItem() {
     const itemId = document.getElementById('q_itemSelect').value;
+    const qty = parseInt(document.getElementById('q_qty').value) || 1;
+    const ket = document.getElementById('q_ket').value || '';
     const item = masterItems.find(i => i.ItemID === itemId);
+    
     if(item) {
-        quoteItems.push(item);
+        // Clone item dan tambahkan properti baru
+        const newItem = { 
+            ...item, 
+            Qty: qty, 
+            Keterangan: ket, 
+            Total: parseInt(item.Price) * qty 
+        };
+        quoteItems.push(newItem);
         renderQuoteTable();
+        
+        // Reset field input kecil
+        document.getElementById('q_qty').value = 1;
+        document.getElementById('q_ket').value = '';
     }
 }
 
 function renderQuoteTable() {
     const tbody = document.getElementById('q_tableBody');
     tbody.innerHTML = '';
-    let total = 0;
+    let grandTotal = 0;
+    
     quoteItems.forEach((itm, index) => {
-        total += parseInt(itm.Price);
+        const itemTotal = itm.Total ? parseInt(itm.Total) : parseInt(itm.Price) * (itm.Qty || 1);
+        grandTotal += itemTotal;
         tbody.innerHTML += `<tr>
+            <td class="p-2 border-b text-center">${index + 1}</td>
             <td class="p-2 border-b">${itm.Name}</td>
+            <td class="p-2 border-b text-center">${itm.Qty || 1}</td>
             <td class="p-2 border-b text-right font-mono">Rp ${formatRupiah(itm.Price)}</td>
+            <td class="p-2 border-b text-right font-mono text-blue-700 font-bold">Rp ${formatRupiah(itemTotal)}</td>
+            <td class="p-2 border-b text-xs">${itm.Keterangan || '-'}</td>
             <td class="p-2 border-b text-center"><button onclick="quoteItems.splice(${index},1); renderQuoteTable()" class="text-red-600 font-bold hover:underline">Hapus</button></td>
         </tr>`;
     });
-    document.getElementById('q_total').innerText = formatRupiah(total);
+    document.getElementById('q_total').innerText = formatRupiah(grandTotal);
 }
 
 function generateQuotation() {
     const toName = document.getElementById('q_to').value;
     if(!toName || quoteItems.length === 0) return alert('Data klien & Item tidak boleh kosong!');
 
-    let total = quoteItems.reduce((sum, item) => sum + parseInt(item.Price), 0);
+    let total = quoteItems.reduce((sum, itm) => sum + (itm.Total ? parseInt(itm.Total) : parseInt(itm.Price) * (itm.Qty || 1)), 0);
     const data = {
         toName: toName,
         phone: document.getElementById('q_phone').value,
@@ -164,15 +178,12 @@ function generateQuotation() {
     callAPI('saveQuotation', data).then(res => {
         alert('Quotation Sukses dibuat! ID: ' + res.data.id);
         
-        // Reset form
-        quoteItems = []; 
-        renderQuoteTable(); 
+        quoteItems = []; renderQuoteTable(); 
         document.getElementById('q_to').value = '';
         document.getElementById('q_phone').value = '';
         document.getElementById('q_address').value = '';
         document.getElementById('q_desc').value = '';
         
-        // Construct temporary object to preview PDF immediately
         const previewData = { ...data, QuoteID: res.data.id, Date: new Date().toISOString() };
         previewData.ItemsJSON = JSON.stringify(data.items); 
         
@@ -182,19 +193,17 @@ function generateQuotation() {
 }
 
 // --- INVOICE LOGIC ---
-
 function loadQuoteIntoInvoice() {
     const qID = document.getElementById('i_quoteRef').value.trim();
     if(!qID) return alert("Masukkan ID Quotation terlebih dahulu.");
     
-    // Cari di dalam state historyQuotes (pastikan sudah diload dari Spreadsheet)
     const quote = historyQuotes.find(q => q.QuoteID === qID);
     if(quote) {
         invoiceItems = JSON.parse(quote.ItemsJSON || '[]');
         renderInvoiceTable();
         alert(`Data item dari ${qID} berhasil ditarik.`);
     } else {
-        alert(`Quotation ${qID} tidak ditemukan. Harap pastikan ID ditulis dengan benar dan sudah direfresh.`);
+        alert(`Quotation ${qID} tidak ditemukan. Harap direfresh terlebih dahulu.`);
     }
 }
 
@@ -204,16 +213,21 @@ function renderInvoiceTable() {
     invSubTotal = 0;
 
     if(invoiceItems.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="2" class="p-2 text-center text-gray-400">Belum ada item ditarik</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="p-2 text-center text-gray-400">Belum ada item ditarik</td></tr>`;
         calculateInvoice();
         return;
     }
 
-    invoiceItems.forEach(itm => {
-        invSubTotal += parseInt(itm.Price);
+    invoiceItems.forEach((itm, index) => {
+        const itemTotal = itm.Total ? parseInt(itm.Total) : parseInt(itm.Price) * (itm.Qty || 1);
+        invSubTotal += itemTotal;
         tbody.innerHTML += `<tr>
+            <td class="p-2 border-b text-center">${index + 1}</td>
             <td class="p-2 border-b text-sm">${itm.Name}</td>
+            <td class="p-2 border-b text-center">${itm.Qty || 1}</td>
             <td class="p-2 border-b text-right font-mono">Rp ${formatRupiah(itm.Price)}</td>
+            <td class="p-2 border-b text-right font-mono font-bold text-indigo-700">Rp ${formatRupiah(itemTotal)}</td>
+            <td class="p-2 border-b text-xs">${itm.Keterangan || '-'}</td>
         </tr>`;
     });
     
@@ -223,17 +237,25 @@ function renderInvoiceTable() {
 
 function calculateInvoice() {
     const isPPN = document.getElementById('i_ppn').checked;
-    const isPPh = document.getElementById('i_pph23').checked;
+    const pphStatus = document.getElementById('i_pph_status').value;
     
-    // Menggunakan Math.round agar tidak ada bilangan desimal pada hasil persentase pajak
     invTaxPPN = isPPN ? Math.round(invSubTotal * 0.11) : 0;
-    invTaxPPh = isPPh ? Math.round(invSubTotal * 0.02) : 0;
-    invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
+    
+    if (pphStatus === 'dipotong') {
+        invTaxPPh = Math.round(invSubTotal * 0.02);
+        invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
+    } else if (pphStatus === 'ditanggung') {
+        // Dicatat angkanya untuk PDF, tetapi TIDAK MENGURANGI Grand Total (Penyedia Jasa Terima Bersih)
+        invTaxPPh = Math.round(invSubTotal * 0.02); 
+        invGrandTotal = invSubTotal + invTaxPPN;
+    } else {
+        invTaxPPh = 0;
+        invGrandTotal = invSubTotal + invTaxPPN;
+    }
     
     document.getElementById('i_grandTotal').innerText = formatRupiah(invGrandTotal);
 }
 
-// Helper: Convert File to Base64 untuk Upload Drive
 function getBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -245,7 +267,7 @@ function getBase64(file) {
 
 async function generateInvoice() {
     const quoteRef = document.getElementById('i_quoteRef').value;
-    if(invoiceItems.length === 0) return alert('Tarik data dari Quotation terlebih dahulu agar ada item yang ditagihkan!');
+    if(invoiceItems.length === 0) return alert('Tarik data dari Quotation terlebih dahulu!');
     
     const bank = document.getElementById('i_bank').value;
     if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
@@ -271,7 +293,6 @@ async function generateInvoice() {
     alert('Invoice Sukses Dibuat! PIN Akses: ' + res.data.pin);
     fetchHistory('invoice'); 
     
-    // Construct preview object
     const previewData = {
         InvID: res.data.id, Date: new Date().toISOString(), ViewCode: res.data.pin,
         SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
@@ -279,16 +300,14 @@ async function generateInvoice() {
     };
     buildInvoicePDF(previewData, invoiceItems);
     
-    // Reset Form Invoice
     document.getElementById('i_quoteRef').value = '';
     invoiceItems = []; renderInvoiceTable();
     document.getElementById('i_notes').value = '';
     document.getElementById('i_file').value = '';
+    document.getElementById('i_pph_status').value = 'none';
 }
 
-
 // --- HISTORY FETCHING & RENDERING ---
-
 function fetchHistory(type) {
     if(type === 'quote') {
         document.getElementById('history_quoteBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
@@ -379,23 +398,45 @@ function buildQuotePDF(qData, items) {
             <p class="font-bold text-xl">${qData.ToName}</p>
             <p class="text-sm">${qData.Phone || ''}</p>
             <p class="text-sm whitespace-pre-line max-w-sm">${qData.Address || ''}</p>
-            ${qData.Description ? `<div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-sm"><b>Deskripsi Pekerjaan:</b><br>${qData.Description}</div>` : ''}
+            ${qData.Description ? `<div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-sm"><b>Perihal/Tujuan:</b><br>${qData.Description}</div>` : ''}
         </div>
         
-        <table class="w-full text-left mb-6 border">
-            <tr class="bg-blue-100 text-blue-900"><th class="p-3 border font-bold">Deskripsi Jasa / Barang</th><th class="p-3 border text-right w-48 font-bold">Harga</th></tr>
-            ${items.map(i => `<tr><td class="p-3 border-b border-x">${i.Name}</td><td class="p-3 border-b border-x text-right font-mono">Rp ${formatRupiah(i.Price)}</td></tr>`).join('')}
+        <!-- FORMAT TABEL BARU -->
+        <table class="w-full text-left mb-6 border-collapse text-sm border border-gray-400">
+            <tr class="bg-blue-100 text-blue-900">
+                <th class="p-2 border border-gray-400 font-bold text-center w-8">No</th>
+                <th class="p-2 border border-gray-400 font-bold">Deskripsi</th>
+                <th class="p-2 border border-gray-400 font-bold text-center w-12">Qty</th>
+                <th class="p-2 border border-gray-400 font-bold text-right w-28">Harga Satuan<br>(Rp)</th>
+                <th class="p-2 border border-gray-400 font-bold text-right w-28">Total Harga<br>(Rp)</th>
+                <th class="p-2 border border-gray-400 font-bold w-40">Keterangan</th>
+            </tr>
+            ${items.map((i, idx) => `
+            <tr>
+                <td class="p-2 border border-gray-400 text-center">${idx + 1}</td>
+                <td class="p-2 border border-gray-400">${i.Name}</td>
+                <td class="p-2 border border-gray-400 text-center">${i.Qty || 1}</td>
+                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Price)}</td>
+                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || i.Price)}</td>
+                <td class="p-2 border border-gray-400 text-xs">${i.Keterangan || ''}</td>
+            </tr>
+            `).join('')}
         </table>
         
-        <div class="flex justify-end mt-4">
-            <div class="bg-blue-800 text-white p-4 rounded min-w-[300px]">
-                <div class="flex justify-between font-bold text-xl"><span>TOTAL BIAYA:</span> <span>Rp ${formatRupiah(qData.Total)}</span></div>
+        <div class="flex flex-col items-end mt-4">
+            <div class="bg-blue-800 text-white p-4 rounded min-w-[300px] mb-4">
+                <div class="flex justify-between font-bold text-xl"><span>GRAND TOTAL:</span> <span>Rp ${formatRupiah(qData.Total)}</span></div>
             </div>
         </div>
         
-        <div class="mt-16 pt-8 text-center text-sm text-gray-500">
-            <p>Hormat Kami,</p>
-            <br><br><br>
+        <div class="mt-4 text-xs text-gray-700 bg-gray-100 p-3 rounded">
+            <strong>Catatan Khusus:</strong><br>
+            *Biaya jasa perseorangan, belum termasuk pajak. Bila dikenakan pajak, maka harga di atas merupakan angka bersih yang harus diterima penyedia jasa.
+        </div>
+        
+        <div class="mt-12 pt-4 text-center text-sm text-gray-800">
+            <p>Demikian penawaran harga ini disampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih.</p>
+            <p class="mt-6 mb-16">Hormat Kami,</p>
             <p class="font-bold border-t border-gray-400 inline-block px-8 pt-2">Manajemen</p>
         </div>
     `;
@@ -407,8 +448,21 @@ function buildInvoicePDF(invData, items) {
     const pubUrl = window.location.origin + window.location.pathname + "?doc=" + invData.InvID;
     
     let taxHTML = '';
-    if(parseInt(invData.TaxPPN) > 0) taxHTML += `<div class="flex justify-between mb-2"><span>PPN (11%):</span> <span>Rp ${formatRupiah(invData.TaxPPN)}</span></div>`;
-    if(parseInt(invData.TaxPPh) > 0) taxHTML += `<div class="flex justify-between mb-2 text-red-600"><span>PPh23 (2%):</span> <span>(Rp ${formatRupiah(invData.TaxPPh)})</span></div>`;
+    if(parseInt(invData.TaxPPN) > 0) {
+        taxHTML += `<div class="flex justify-between mb-2"><span>PPN (11%):</span> <span>Rp ${formatRupiah(invData.TaxPPN)}</span></div>`;
+    }
+    
+    // Logika Pintar untuk mendeteksi apakah PPh dipotong atau ditanggung pembeli tanpa merubah database Sheets
+    if(parseInt(invData.TaxPPh) > 0) {
+        const expectedDipotongTotal = parseInt(invData.SubTotal) + parseInt(invData.TaxPPN) - parseInt(invData.TaxPPh);
+        const isDipotong = (parseInt(invData.Total) === expectedDipotongTotal);
+
+        if(isDipotong) {
+            taxHTML += `<div class="flex justify-between mb-2 text-red-600 border-b border-gray-300 pb-2"><span>Dipotong PPh 23 (2%):</span> <span>(Rp ${formatRupiah(invData.TaxPPh)})</span></div>`;
+        } else {
+            taxHTML += `<div class="flex justify-between mb-2 text-green-700 text-xs italic border-b border-gray-300 pb-2"><span>*Telah Ditanggung Pembeli (PPh 23 2%)</span> <span>(Rp ${formatRupiah(invData.TaxPPh)})</span></div>`;
+        }
+    }
 
     const html = `
         <div class="flex justify-between items-start mb-8 border-b-4 border-indigo-800 pb-4">
@@ -428,16 +482,33 @@ function buildInvoicePDF(invData, items) {
             </div>
         </div>
         
-        <table class="w-full text-left mt-6 mb-6 border">
-            <tr class="bg-indigo-100 text-indigo-900"><th class="p-3 border font-bold">Deskripsi Penagihan</th><th class="p-3 border text-right w-48 font-bold">Jumlah</th></tr>
-            ${items.map(i => `<tr><td class="p-3 border-b border-x">${i.Name}</td><td class="p-3 border-b border-x text-right font-mono">Rp ${formatRupiah(i.Price)}</td></tr>`).join('')}
+        <!-- FORMAT TABEL BARU -->
+        <table class="w-full text-left mt-6 mb-6 border-collapse text-sm border border-gray-400">
+            <tr class="bg-indigo-100 text-indigo-900">
+                <th class="p-2 border border-gray-400 font-bold text-center w-8">No</th>
+                <th class="p-2 border border-gray-400 font-bold">Deskripsi Penagihan</th>
+                <th class="p-2 border border-gray-400 font-bold text-center w-12">Qty</th>
+                <th class="p-2 border border-gray-400 font-bold text-right w-28">Harga Satuan<br>(Rp)</th>
+                <th class="p-2 border border-gray-400 font-bold text-right w-28">Jumlah<br>(Rp)</th>
+                <th class="p-2 border border-gray-400 font-bold w-40">Keterangan</th>
+            </tr>
+            ${items.map((i, idx) => `
+            <tr>
+                <td class="p-2 border border-gray-400 text-center">${idx + 1}</td>
+                <td class="p-2 border border-gray-400">${i.Name}</td>
+                <td class="p-2 border border-gray-400 text-center">${i.Qty || 1}</td>
+                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Price)}</td>
+                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || i.Price)}</td>
+                <td class="p-2 border border-gray-400 text-xs">${i.Keterangan || ''}</td>
+            </tr>
+            `).join('')}
         </table>
         
         <div class="flex flex-col items-end mt-4">
             <div class="w-80 text-right">
                 <div class="flex justify-between mb-2"><span>SubTotal:</span> <span>Rp ${formatRupiah(invData.SubTotal)}</span></div>
                 ${taxHTML}
-                <div class="flex justify-between mt-4 pt-4 border-t-2 border-gray-800 font-bold text-2xl text-indigo-800"><span>TOTAL:</span> <span>Rp ${formatRupiah(invData.Total)}</span></div>
+                <div class="flex justify-between mt-2 pt-2 border-t-2 border-gray-800 font-bold text-2xl text-indigo-800"><span>TOTAL:</span> <span>Rp ${formatRupiah(invData.Total)}</span></div>
             </div>
         </div>
         
@@ -461,7 +532,6 @@ function closePDFModal() {
     document.getElementById('pdfModal').classList.add('hidden');
 }
 
-// Fungsi untuk download PDF ditambahkan di sini (Perbaikan BUG FATAL)
 function downloadPDF(elementId, fileName) {
     const element = document.getElementById(elementId);
     const opt = {
