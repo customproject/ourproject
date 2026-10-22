@@ -1,16 +1,12 @@
-// ==========================================
-// KONFIGURASI FRONTEND
-// ==========================================
-// PASTE URL DEPLOYMENT APPS SCRIPT ANDA DI SINI:
 const API_URL = "https://script.google.com/macros/s/AKfycbwkXo-QvX9KU-LPBXU6bbBukUdKMHycrWy0CI9K-Hkl6lxbQs2nN-OE5h9n4GFirimF/exec"; 
 
-// State Application
 let masterItems = [];
 let bankAccounts = [];
 let quoteItems = [];
 let invoiceItems = []; 
 let historyQuotes = [];
 let historyInvoices = [];
+let activeSenderInfo = null; // Menyimpan info perusahaan untuk Invoice
 
 let invSubTotal = 0;
 let invTaxPPN = 0;
@@ -31,7 +27,6 @@ if (viewDocId) {
     }
 }
 
-// --- CORE SYSTEM ---
 function callAPI(action, data) {
     document.getElementById('loading').classList.remove('hidden');
     return fetch(API_URL, {
@@ -75,7 +70,6 @@ function formatRupiah(angka) {
     return parseInt(angka).toLocaleString('id-ID');
 }
 
-// --- MASTER DATA ---
 function saveMasterItem() {
     const data = {
         mainCat: document.getElementById('m_mainCat').value,
@@ -119,22 +113,22 @@ function fetchBanks() {
 // --- QUOTATION LOGIC ---
 function addQuoteItem() {
     const itemId = document.getElementById('q_itemSelect').value;
-    const qty = parseInt(document.getElementById('q_qty').value) || 1;
+    // Menggunakan parseFloat agar menerima desimal
+    const qty = parseFloat(document.getElementById('q_qty').value) || 1;
     const ket = document.getElementById('q_ket').value || '';
     const item = masterItems.find(i => i.ItemID === itemId);
     
     if(item) {
-        // Clone item dan tambahkan properti baru
         const newItem = { 
             ...item, 
             Qty: qty, 
             Keterangan: ket, 
-            Total: parseInt(item.Price) * qty 
+            // Dibulatkan agar tidak ada koma rupiah (Total per item)
+            Total: Math.round(parseFloat(item.Price) * qty) 
         };
         quoteItems.push(newItem);
         renderQuoteTable();
         
-        // Reset field input kecil
         document.getElementById('q_qty').value = 1;
         document.getElementById('q_ket').value = '';
     }
@@ -146,7 +140,7 @@ function renderQuoteTable() {
     let grandTotal = 0;
     
     quoteItems.forEach((itm, index) => {
-        const itemTotal = itm.Total ? parseInt(itm.Total) : parseInt(itm.Price) * (itm.Qty || 1);
+        const itemTotal = itm.Total ? parseInt(itm.Total) : Math.round(parseFloat(itm.Price) * (itm.Qty || 1));
         grandTotal += itemTotal;
         tbody.innerHTML += `<tr>
             <td class="p-2 border-b text-center">${index + 1}</td>
@@ -165,13 +159,24 @@ function generateQuotation() {
     const toName = document.getElementById('q_to').value;
     if(!toName || quoteItems.length === 0) return alert('Data klien & Item tidak boleh kosong!');
 
-    let total = quoteItems.reduce((sum, itm) => sum + (itm.Total ? parseInt(itm.Total) : parseInt(itm.Price) * (itm.Qty || 1)), 0);
+    let total = quoteItems.reduce((sum, itm) => sum + (itm.Total ? parseInt(itm.Total) : Math.round(parseFloat(itm.Price) * (itm.Qty || 1))), 0);
+    
+    const senderData = {
+        name: document.getElementById('q_sender_name').value || 'PT NAMA BISNIS ANDA',
+        phone: document.getElementById('q_sender_phone').value || '',
+        address: document.getElementById('q_sender_address').value || ''
+    };
+
     const data = {
         toName: toName,
         phone: document.getElementById('q_phone').value,
         address: document.getElementById('q_address').value,
         desc: document.getElementById('q_desc').value,
-        items: quoteItems,
+        // Kita bungkus items & identitas dalam satu objek agar tidak mengganggu kolom spreadsheet
+        items: {
+            itemsList: quoteItems,
+            senderInfo: senderData
+        },
         total: total
     };
 
@@ -188,7 +193,7 @@ function generateQuotation() {
         previewData.ItemsJSON = JSON.stringify(data.items); 
         
         fetchHistory('quote'); 
-        buildQuotePDF(previewData, data.items); 
+        buildQuotePDF(previewData, data.items.itemsList, senderData); 
     });
 }
 
@@ -199,7 +204,16 @@ function loadQuoteIntoInvoice() {
     
     const quote = historyQuotes.find(q => q.QuoteID === qID);
     if(quote) {
-        invoiceItems = JSON.parse(quote.ItemsJSON || '[]');
+        let parsed = JSON.parse(quote.ItemsJSON || '[]');
+        // Pengecekan kompatibilitas format lama (array) vs format baru (objek berbungkus)
+        if (Array.isArray(parsed)) {
+            invoiceItems = parsed;
+            activeSenderInfo = { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' };
+        } else {
+            invoiceItems = parsed.itemsList || [];
+            activeSenderInfo = parsed.senderInfo || { name: 'PT NAMA BISNIS ANDA', phone: '', address: '' };
+        }
+        
         renderInvoiceTable();
         alert(`Data item dari ${qID} berhasil ditarik.`);
     } else {
@@ -219,7 +233,7 @@ function renderInvoiceTable() {
     }
 
     invoiceItems.forEach((itm, index) => {
-        const itemTotal = itm.Total ? parseInt(itm.Total) : parseInt(itm.Price) * (itm.Qty || 1);
+        const itemTotal = itm.Total ? parseInt(itm.Total) : Math.round(parseFloat(itm.Price) * (itm.Qty || 1));
         invSubTotal += itemTotal;
         tbody.innerHTML += `<tr>
             <td class="p-2 border-b text-center">${index + 1}</td>
@@ -245,7 +259,6 @@ function calculateInvoice() {
         invTaxPPh = Math.round(invSubTotal * 0.02);
         invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
     } else if (pphStatus === 'ditanggung') {
-        // Dicatat angkanya untuk PDF, tetapi TIDAK MENGURANGI Grand Total (Penyedia Jasa Terima Bersih)
         invTaxPPh = Math.round(invSubTotal * 0.02); 
         invGrandTotal = invSubTotal + invTaxPPN;
     } else {
@@ -276,7 +289,12 @@ async function generateInvoice() {
     const fileInput = document.getElementById('i_file').files[0];
 
     const data = {
-        quoteId: quoteRef, items: invoiceItems, 
+        quoteId: quoteRef, 
+        // Membungkus kembali data info sender untuk Invoice
+        items: {
+            itemsList: invoiceItems,
+            senderInfo: activeSenderInfo
+        }, 
         subTotal: invSubTotal, taxPPN: invTaxPPN, taxPPh: invTaxPPh, total: invGrandTotal, 
         bankId: bank, notes: notes
     };
@@ -298,7 +316,7 @@ async function generateInvoice() {
         SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
         Notes: notes, BankID: bank
     };
-    buildInvoicePDF(previewData, invoiceItems);
+    buildInvoicePDF(previewData, invoiceItems, activeSenderInfo);
     
     document.getElementById('i_quoteRef').value = '';
     invoiceItems = []; renderInvoiceTable();
@@ -364,21 +382,27 @@ function fetchHistory(type) {
 
 function previewHistoryQuote(index) {
     const q = historyQuotes[index];
-    const items = JSON.parse(q.ItemsJSON || '[]');
-    buildQuotePDF(q, items);
+    let parsed = JSON.parse(q.ItemsJSON || '[]');
+    let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
+    let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
+    
+    buildQuotePDF(q, items, sender);
 }
 
 function previewHistoryInvoice(index) {
     const inv = historyInvoices[index];
-    const items = JSON.parse(inv.ItemsJSON || '[]');
-    buildInvoicePDF(inv, items);
+    let parsed = JSON.parse(inv.ItemsJSON || '[]');
+    let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
+    let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
+    
+    buildInvoicePDF(inv, items, sender);
 }
 
 
 // --- PDF RENDERER & MODAL HANDLER ---
 let activeDocName = "Dokumen";
 
-function buildQuotePDF(qData, items) {
+function buildQuotePDF(qData, items, sender) {
     activeDocName = `Quotation_${qData.QuoteID}`;
     const html = `
         <div class="flex justify-between items-start mb-8 border-b-4 border-blue-800 pb-4">
@@ -387,8 +411,9 @@ function buildQuotePDF(qData, items) {
                 <p class="text-gray-600 mt-2 text-lg font-bold">${qData.QuoteID}</p>
             </div>
             <div class="text-right">
-                <h2 class="font-bold text-xl">PT NAMA BISNIS ANDA</h2>
-                <p class="text-sm">Jl. Pusat Bisnis No. 1, Jakarta 12345<br>Telp: 0812-XXXX-XXXX</p>
+                <h2 class="font-bold text-xl">${sender.name}</h2>
+                <p class="text-sm whitespace-pre-line">${sender.address}</p>
+                <p class="text-sm">Telp: ${sender.phone}</p>
                 <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${qData.Date.substring(0,10)}</p>
             </div>
         </div>
@@ -401,7 +426,6 @@ function buildQuotePDF(qData, items) {
             ${qData.Description ? `<div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-sm"><b>Perihal/Tujuan:</b><br>${qData.Description}</div>` : ''}
         </div>
         
-        <!-- FORMAT TABEL BARU -->
         <table class="w-full text-left mb-6 border-collapse text-sm border border-gray-400">
             <tr class="bg-blue-100 text-blue-900">
                 <th class="p-2 border border-gray-400 font-bold text-center w-8">No</th>
@@ -417,7 +441,7 @@ function buildQuotePDF(qData, items) {
                 <td class="p-2 border border-gray-400">${i.Name}</td>
                 <td class="p-2 border border-gray-400 text-center">${i.Qty || 1}</td>
                 <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Price)}</td>
-                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || i.Price)}</td>
+                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || Math.round(parseFloat(i.Price)*(i.Qty||1)))}</td>
                 <td class="p-2 border border-gray-400 text-xs">${i.Keterangan || ''}</td>
             </tr>
             `).join('')}
@@ -443,7 +467,7 @@ function buildQuotePDF(qData, items) {
     openPDFModal(html);
 }
 
-function buildInvoicePDF(invData, items) {
+function buildInvoicePDF(invData, items, sender) {
     activeDocName = `Invoice_${invData.InvID}`;
     const pubUrl = window.location.origin + window.location.pathname + "?doc=" + invData.InvID;
     
@@ -452,7 +476,6 @@ function buildInvoicePDF(invData, items) {
         taxHTML += `<div class="flex justify-between mb-2"><span>PPN (11%):</span> <span>Rp ${formatRupiah(invData.TaxPPN)}</span></div>`;
     }
     
-    // Logika Pintar untuk mendeteksi apakah PPh dipotong atau ditanggung pembeli tanpa merubah database Sheets
     if(parseInt(invData.TaxPPh) > 0) {
         const expectedDipotongTotal = parseInt(invData.SubTotal) + parseInt(invData.TaxPPN) - parseInt(invData.TaxPPh);
         const isDipotong = (parseInt(invData.Total) === expectedDipotongTotal);
@@ -476,13 +499,13 @@ function buildInvoicePDF(invData, items) {
                 </div>
             </div>
             <div class="text-right">
-                <h2 class="font-bold text-xl">PT NAMA BISNIS ANDA</h2>
-                <p class="text-sm">Jl. Pusat Bisnis No. 1, Jakarta 12345</p>
+                <h2 class="font-bold text-xl">${sender.name}</h2>
+                <p class="text-sm whitespace-pre-line">${sender.address}</p>
+                <p class="text-sm">Telp: ${sender.phone}</p>
                 <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${invData.Date.substring(0,10)}</p>
             </div>
         </div>
         
-        <!-- FORMAT TABEL BARU -->
         <table class="w-full text-left mt-6 mb-6 border-collapse text-sm border border-gray-400">
             <tr class="bg-indigo-100 text-indigo-900">
                 <th class="p-2 border border-gray-400 font-bold text-center w-8">No</th>
@@ -498,7 +521,7 @@ function buildInvoicePDF(invData, items) {
                 <td class="p-2 border border-gray-400">${i.Name}</td>
                 <td class="p-2 border border-gray-400 text-center">${i.Qty || 1}</td>
                 <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Price)}</td>
-                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || i.Price)}</td>
+                <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || Math.round(parseFloat(i.Price)*(i.Qty||1)))}</td>
                 <td class="p-2 border border-gray-400 text-xs">${i.Keterangan || ''}</td>
             </tr>
             `).join('')}
@@ -548,7 +571,6 @@ function downloadActivePDF() {
     downloadPDF('pdfRenderArea', activeDocName);
 }
 
-// --- PUBLIC VIEW (KLIEN) LOGIC ---
 function unlockPublicDoc() {
     const pin = document.getElementById('publicPin').value;
     callAPI('publicView', { docId: viewDocId, pin: pin }).then(res => {
@@ -557,9 +579,11 @@ function unlockPublicDoc() {
             document.getElementById('publicDocContent').classList.remove('hidden');
             
             const data = res.data;
-            const items = JSON.parse(data.ItemsJSON);
+            let parsed = JSON.parse(data.ItemsJSON);
+            let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
+            let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
             
-            buildInvoicePDF(data, items);
+            buildInvoicePDF(data, items, sender);
             document.getElementById('renderedPublicDoc').innerHTML = document.getElementById('pdfRenderArea').innerHTML;
             closePDFModal(); 
         } else {
