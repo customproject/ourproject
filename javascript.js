@@ -1,5 +1,5 @@
-// GANTI DENGAN URL DEPLOYMENT BARU ANDA YANG TELAH DI-UPDATE!
-const API_URL = "https://script.google.com/macros/s/AKfycbwkXo-QvX9KU-LPBXU6bbBukUdKMHycrWy0CI9K-Hkl6lxbQs2nN-OE5h9n4GFirimF/exec"; 
+// GANTI DENGAN URL DEPLOYMENT BARU ANDA
+const API_URL = "https://script.google.com/macros/s/AKfycbyto6bORQN8wTh_RdPfDrfID5swOHw63bdqY66WW5C67IGGyX0OJIxM_6wU1_l4BuaB/exec"; 
 
 let masterItems = [];
 let bankAccounts = [];
@@ -7,7 +7,6 @@ let quoteItems = [];
 let invoiceItems = []; 
 let historyQuotes = [];
 let historyInvoices = [];
-let historyUploads = []; 
 let activeSenderInfo = null;
 
 let invSubTotal = 0;
@@ -230,7 +229,6 @@ function loadQuoteIntoInvoice() {
             invoiceItems = parsed.itemsList || [];
             activeSenderInfo = parsed.senderInfo || { name: 'PT NAMA BISNIS ANDA', phone: '', address: '' };
         }
-        
         renderInvoiceTable();
     } else {
         alert(`Quotation ${qID} tidak ditemukan di sistem.`);
@@ -271,7 +269,6 @@ function calculateInvoice() {
     
     invTaxPPN = isPPN ? Math.round(invSubTotal * 0.11) : 0;
     
-    // PERBAIKAN LOGIKA GROSS UP 2% DAN 2.5%
     if (pphStatus === 'dipotong_2') {
         invTaxPPh = Math.round(invSubTotal * 0.02);
         invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
@@ -294,15 +291,6 @@ function calculateInvoice() {
     document.getElementById('i_grandTotal').innerText = formatRupiah(invGrandTotal);
 }
 
-function getBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result.split(',')[1]); 
-        reader.onerror = error => reject(error);
-    });
-}
-
 async function generateInvoice() {
     try {
         const quoteRef = document.getElementById('i_quoteRef').value;
@@ -312,9 +300,6 @@ async function generateInvoice() {
         if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
 
         const notes = document.getElementById('i_notes').value;
-        
-        const fileElement = document.getElementById('i_file');
-        const fileInput = (fileElement && fileElement.files) ? fileElement.files[0] : null;
 
         const data = {
             quoteId: quoteRef, 
@@ -328,32 +313,21 @@ async function generateInvoice() {
 
         const res = await callAPI('saveInvoice', data);
         if(res.status === 'error') throw new Error(res.message); 
-        
-        let uploadedFileUrl = null;
-        if(fileInput) {
-            const b64 = await getBase64(fileInput);
-            const uploadRes = await callAPI('uploadFile', {
-                refId: res.data.id, filename: fileInput.name, mimeType: fileInput.type, base64: b64
-            });
-            if(uploadRes.status === 'success') {
-                uploadedFileUrl = uploadRes.data.fileUrl;
-            }
-        }
 
         alert('Invoice Sukses Dibuat! PIN Akses: ' + res.data.pin);
         fetchHistory('invoice'); 
         
+        // Memastikan Date untuk preview adalah tanggal hari ini/saat ini
         const previewData = {
             InvID: res.data.id, Date: new Date().toISOString(), ViewCode: res.data.pin,
             SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
-            Notes: notes, BankID: bank, UploadedFileURL: uploadedFileUrl
+            Notes: notes, BankID: bank
         };
         buildInvoicePDF(previewData, invoiceItems, activeSenderInfo);
         
         document.getElementById('i_quoteRef').value = '';
         invoiceItems = []; renderInvoiceTable();
         document.getElementById('i_notes').value = '';
-        if(fileElement) fileElement.value = '';
         document.getElementById('i_pph_status').value = 'none';
 
     } catch (error) {
@@ -392,11 +366,6 @@ function fetchHistory(type) {
     if(type === 'invoice') {
         document.getElementById('history_invoiceBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
         
-        // Memastikan Sinkronisasi Sheet Uploads didapat saat menarik data Invoice
-        callAPI('getUploads', {}).then(resUp => {
-            if(resUp.status === 'success') historyUploads = resUp.data;
-        });
-
         callAPI('getInvoices', {}).then(res => {
             if(res.status === 'success') {
                 historyInvoices = res.data.slice().reverse();
@@ -458,7 +427,7 @@ function buildQuotePDF(qData, items, sender) {
                 <h2 class="font-bold text-xl">${sender.name}</h2>
                 <p class="text-sm whitespace-pre-line">${sender.address}</p>
                 <p class="text-sm">Telp: ${sender.phone}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${qData.Date.substring(0,10)}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${qData.Date ? qData.Date.substring(0,10) : '-'}</p>
             </div>
         </div>
 
@@ -513,14 +482,12 @@ function buildQuotePDF(qData, items, sender) {
 
 function buildInvoicePDF(invData, items, sender) {
     activeDocName = `Invoice_${invData.InvID}`;
-    const pubUrl = window.location.origin + window.location.pathname + "?doc=" + invData.InvID;
     
     let taxHTML = '';
     if(parseInt(invData.TaxPPN) > 0) {
         taxHTML += `<div class="flex justify-between mb-2"><span>PPN (11%):</span> <span>Rp ${formatRupiah(invData.TaxPPN)}</span></div>`;
     }
     
-    // Logika Pendeteksi Jenis PPh & Ratenya secara dinamis
     if(parseInt(invData.TaxPPh) > 0) {
         const sub = parseInt(invData.SubTotal);
         const ppn = parseInt(invData.TaxPPN);
@@ -535,7 +502,6 @@ function buildInvoicePDF(invData, items, sender) {
         if (isDipotong) impliedRate = (pph / sub) * 100;
         if (isDitanggung) impliedRate = (pph / (sub + pph)) * 100;
         
-        // Pengecekan toleransi pembulatan untuk 2.5%
         if (Math.abs(impliedRate - 2.5) < 0.1) rateStr = "2.5%";
 
         if(isDipotong) {
@@ -547,31 +513,22 @@ function buildInvoicePDF(invData, items, sender) {
         }
     }
 
-    // Menampilkan Sinkronisasi URL File Upload dari Drive jika tersedia
-    const uploadRec = historyUploads.find(u => u.RefID === invData.InvID);
-    const finalFileUrl = uploadRec ? uploadRec.FileURL : (invData.UploadedFileURL || null);
-    const uploadHTML = finalFileUrl ? `<p class="text-sm mt-3 pt-3 border-t border-gray-200"><b>Lampiran Bukti Pekerjaan:</b> <br> <a href="${finalFileUrl}" target="_blank" class="text-blue-600 underline break-all">${finalFileUrl}</a></p>` : '';
-
-    // Menyembunyikan text "Catatan:" sepenuhnya jika user tidak mengisi atau hanya mengisi -
     const notesStr = (invData.Notes || '').trim();
     const notesHTML = (notesStr !== '' && notesStr !== '-') ? `<p class="text-sm mt-3 whitespace-pre-line">Catatan:<br>${notesStr}</p>` : '';
 
+    // Kotak Link E-Invoice dihilangkan sepenuhnya agar tidak mengganggu layout PDF akhir.
+    // Tgl Terbit dijamin menggunakan tanggal Invoice (invData.Date)
     const html = `
         <div class="flex justify-between items-start mb-8 border-b-4 border-indigo-800 pb-4">
             <div>
                 <h1 class="text-4xl font-extrabold text-indigo-800 tracking-wider">INVOICE</h1>
                 <p class="text-gray-600 mt-2 text-lg font-bold">${invData.InvID}</p>
-                <div class="mt-2 text-xs bg-indigo-50 border p-2 rounded inline-block">
-                    <p class="font-bold">Link Akses E-Invoice Klien:</p>
-                    <p class="font-mono text-blue-600">${pubUrl}</p>
-                    <p class="mt-1">PIN AKSES: <span class="font-bold text-lg text-indigo-700 tracking-widest">${invData.ViewCode}</span></p>
-                </div>
             </div>
             <div class="text-right">
                 <h2 class="font-bold text-xl">${sender.name}</h2>
                 <p class="text-sm whitespace-pre-line">${sender.address}</p>
                 <p class="text-sm">Telp: ${sender.phone}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${invData.Date.substring(0,10)}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${invData.Date ? invData.Date.substring(0,10) : '-'}</p>
             </div>
         </div>
         
@@ -608,7 +565,6 @@ function buildInvoicePDF(invData, items, sender) {
             <p class="font-bold text-gray-800 mb-2">Informasi Pembayaran:</p>
             <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID}</p>
             ${notesHTML}
-            ${uploadHTML}
         </div>
         
         <div class="mt-12 text-center text-sm text-gray-500">Terima kasih atas kepercayaan Anda bekerja sama dengan kami.</div>
@@ -625,13 +581,14 @@ function closePDFModal() {
     document.getElementById('pdfModal').classList.add('hidden');
 }
 
+// Konfigurasi PDF diperketat agar pas di kertas A4 tanpa merusak format / terpotong (scale, margin, windowWidth)
 function downloadPDF(elementId, fileName) {
     const element = document.getElementById(elementId);
     const opt = {
-        margin:       0,
+        margin:       [10, 10, 10, 10], // Margin atas, kiri, bawah, kanan (dalam mm)
         filename:     fileName + '.pdf',
-        image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 2, useCORS: true },
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, windowWidth: 800 }, // Kunci stabilitas layout PDF
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     html2pdf().set(opt).from(element).save();
