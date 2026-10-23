@@ -25,7 +25,7 @@
             <button onclick="downloadPDF('renderedPublicDoc', 'Invoice_Public')" class="mb-6 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded print:hidden flex items-center gap-2">
                 Download PDF A4
             </button>
-            <div id="renderedPublicDoc" class="p-4"></div>
+            <div id="renderedPublicDoc" class="p-4 bg-white min-w-[210mm] mx-auto box-border"></div>
         </div>
     </div>
 
@@ -178,15 +178,19 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 bg-gray-50 p-4 rounded border">
                             <div>
-                                <label class="block font-bold text-sm mb-2 text-gray-800 border-b pb-1">Pengaturan Pajak:</label>
+                                <label class="block font-bold text-sm mb-2 text-gray-800 border-b pb-1">Pengaturan Penagihan:</label>
+                                <!-- TAMBAHAN: Kontrol Tanggal Invoice -->
+                                <label class="block font-bold text-xs mb-1 mt-2 text-gray-700">Tanggal Invoice Terbit:</label>
+                                <input type="date" id="i_date" class="border p-2 rounded w-full bg-white text-sm mb-3">
+                                
                                 <label class="flex items-center mb-4 cursor-pointer"><input type="checkbox" id="i_ppn" class="mr-2 w-4 h-4" onchange="calculateInvoice()"> Tambah PPN 11%</label>
                                 
-                                <label class="block font-bold text-sm mb-1 text-gray-800">Status PPh (Pajak Penghasilan):</label>
+                                <label class="block font-bold text-xs mb-1 text-gray-700">Status PPh (Pajak Penghasilan):</label>
                                 <select id="i_pph_status" class="border p-2 rounded w-full bg-white text-sm" onchange="calculateInvoice()">
                                     <option value="none">Tanpa PPh</option>
-                                    <option value="dipotong_2">Dipotong PPh 2% (Mengurangi Total Bersih)</option>
+                                    <option value="dipotong_2">Dipotong PPh 2% (Mengurangi Total)</option>
                                     <option value="ditanggung_2">Ditanggung Pembeli PPh 2% (Gross Up)</option>
-                                    <option value="dipotong_25">Dipotong PPh 2.5% (Mengurangi Total Bersih)</option>
+                                    <option value="dipotong_25">Dipotong PPh 2.5% (Mengurangi Total)</option>
                                     <option value="ditanggung_25">Ditanggung Pembeli PPh 2.5% (Gross Up)</option>
                                 </select>
                             </div>
@@ -255,7 +259,7 @@
                     </div>
                 </div>
                 <div class="p-8 overflow-auto flex justify-center bg-gray-300">
-                    <div id="pdfRenderArea" class="bg-white p-10 shadow-lg w-[210mm] min-h-[297mm] relative text-gray-900"></div>
+                    <div id="pdfRenderArea" class="bg-white p-10 shadow-lg w-[210mm] min-w-[210mm] min-h-[297mm] relative text-gray-900 box-border mx-auto"></div>
                 </div>
             </div>
         </div>

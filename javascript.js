@@ -1,5 +1,5 @@
 // GANTI DENGAN URL DEPLOYMENT BARU ANDA YANG TELAH DI-UPDATE!
-const API_URL = "https://script.google.com/macros/s/AKfycbz6Nnk7Lm_GEd3PrBjhqY0dNqFl6azfNMPAyIMWAJ5gwgh3OCzfoCKN24sml60mGCov/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbztDUbiPpCZ0x-dndTlTk1mn-EdPaTdfp48IFoeiR18_O3IHe-a5rGPYME-LGqHQWE9/exec"; 
 
 let masterItems = [];
 let bankAccounts = [];
@@ -69,16 +69,15 @@ function showPage(pageId) {
     document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('page-' + pageId).classList.remove('hidden');
     
-    if (pageId === 'quote') {
-        fetchHistory('quote');
-    }
+    if (pageId === 'quote') fetchHistory('quote');
     if (pageId === 'invoice') {
         fetchHistory('quote'); 
         fetchHistory('invoice');
         fetchBanks(); 
+        // Set tanggal default hari ini ke form input
+        document.getElementById('i_date').value = new Date().toISOString().substring(0, 10);
     }
 }
-
 function formatRupiah(angka) {
     if(!angka || isNaN(angka)) return "0";
     return parseInt(angka).toLocaleString('id-ID');
@@ -311,11 +310,14 @@ async function generateInvoice() {
         if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
 
         const notes = document.getElementById('i_notes').value;
+        const invDate = document.getElementById('i_date').value; // Tarik Data Tanggal Manual
+        
         const fileElement = document.getElementById('i_file');
         const fileInput = (fileElement && fileElement.files) ? fileElement.files[0] : null;
 
         const data = {
             quoteId: quoteRef, 
+            date: invDate, // Kirim ke Backend
             items: { itemsList: invoiceItems, senderInfo: activeSenderInfo }, 
             subTotal: invSubTotal, taxPPN: invTaxPPN, taxPPh: invTaxPPh, total: invGrandTotal, 
             bankId: bank, notes: notes
@@ -339,7 +341,7 @@ async function generateInvoice() {
         fetchHistory('invoice'); 
         
         const previewData = {
-            InvID: res.data.id, Date: new Date().toISOString(), ViewCode: res.data.pin,
+            InvID: res.data.id, Date: invDate, ViewCode: res.data.pin,
             SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
             Notes: notes, BankID: bank, UploadedFileURL: uploadedFileUrl
         };
@@ -549,11 +551,14 @@ function buildInvoicePDF(invData, items, sender) {
             <div>
                 <h1 class="text-4xl font-extrabold text-indigo-800 tracking-wider">INVOICE</h1>
                 <p class="text-gray-600 mt-2 text-lg font-bold">${invData.InvID}</p>
-                <div class="mt-2 text-xs bg-indigo-50 border p-2 rounded inline-block">
-                    <p class="font-bold">Link Akses E-Invoice Klien:</p>
-                    <p class="font-mono text-blue-600">${pubUrl}</p>
-                    <p class="mt-1">PIN AKSES: <span class="font-bold text-lg text-indigo-700 tracking-widest">${invData.ViewCode}</span></p>
+                
+                <!-- KUNCI FIX BOX HILANG: Menggunakan Inline Styles absolut -->
+                <div style="margin-top: 15px; background-color: #eef2ff; border: 1px solid #c7d2fe; padding: 12px; border-radius: 6px; display: inline-block; min-width: 250px;">
+                    <p style="font-weight: bold; font-size: 12px; color: #312e81; margin-bottom: 4px;">Link Akses E-Invoice Klien:</p>
+                    <p style="font-family: monospace; color: #2563eb; font-size: 12px; margin-bottom: 8px;">${pubUrl}</p>
+                    <p style="font-size: 12px; color: #1e1b4b;">PIN AKSES: <span style="font-weight: bold; font-size: 18px; color: #4338ca; letter-spacing: 3px;">${invData.ViewCode}</span></p>
                 </div>
+
             </div>
             <div class="text-right">
                 <h2 class="font-bold text-xl">${sender.name}</h2>
@@ -616,10 +621,11 @@ function closePDFModal() {
 function downloadPDF(elementId, fileName) {
     const element = document.getElementById(elementId);
     const opt = {
-        margin:       0,
+        margin:       [5, 0, 10, 0], // Memberi jarak margin atas bawah
         filename:     fileName + '.pdf',
         image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 2, useCORS: true },
+        // KUNCI FIX: windowWidth memaksa library membaca dokumen layaknya di layar desktop lebar
+        html2canvas:  { scale: 2, useCORS: true, windowWidth: 1200 }, 
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     html2pdf().set(opt).from(element).save();
