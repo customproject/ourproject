@@ -1,5 +1,5 @@
 // GANTI DENGAN URL DEPLOYMENT BARU ANDA YANG TELAH DI-UPDATE!
-const API_URL = "https://script.google.com/macros/s/AKfycbyCMDNioqezTB_pXcG6eeGT4soS0_VmE47k-LRER1gsxHoTFe3QxGxYP1RdZ6mikhKS/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbxgmeIMnF4FA1u8yJ0sWKptJJS_RWx41lOCHp4kzoZI9vsCkI6r94Q8-LOcuGfTthQ/exec"; 
 
 let masterItems = [];
 let bankAccounts = [];
@@ -27,6 +27,13 @@ if (viewDocId) {
         document.getElementById('dashboardScreen').classList.remove('hidden');
         showPage('quote');
     }
+}
+
+// Helper untuk mendapatkan tanggal lokal YYYY-MM-DD anti-mundur
+function getLocalDate() {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().substring(0, 10);
 }
 
 function callAPI(action, data) {
@@ -69,15 +76,18 @@ function showPage(pageId) {
     document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('page-' + pageId).classList.remove('hidden');
     
-    if (pageId === 'quote') fetchHistory('quote');
+    if (pageId === 'quote') {
+        fetchHistory('quote');
+    }
     if (pageId === 'invoice') {
         fetchHistory('quote'); 
         fetchHistory('invoice');
         fetchBanks(); 
-        // Set tanggal default hari ini ke form input
-        document.getElementById('i_date').value = new Date().toISOString().substring(0, 10);
+        // FIX: Gunakan helper lokal, BUKAN new Date().toISOString()
+        document.getElementById('i_date').value = getLocalDate();
     }
 }
+
 function formatRupiah(angka) {
     if(!angka || isNaN(angka)) return "0";
     return parseInt(angka).toLocaleString('id-ID');
@@ -199,13 +209,11 @@ function generateQuotation() {
         document.getElementById('q_address').value = '';
         document.getElementById('q_desc').value = '';
         
-        // Membuat string tanggal lokal (Hari ini sesuai jam perangkat)
-        const d = new Date();
-        const localDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        // FIX: Gunakan helper tanggal lokal
+        const localDate = getLocalDate();
 
-        // Menggunakan localDate alih-alih toISOString()
         const previewData = { ...data, QuoteID: res.data.id, Date: localDate };
-        previewData.ItemsJSON = JSON.stringify(data.items);
+        previewData.ItemsJSON = JSON.stringify(data.items); 
         
         fetchHistory('quote'); 
         buildQuotePDF(previewData, data.items.itemsList, senderData); 
