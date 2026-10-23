@@ -552,11 +552,11 @@ function buildInvoicePDF(invData, items, sender) {
                 <h1 class="text-4xl font-extrabold text-indigo-800 tracking-wider">INVOICE</h1>
                 <p class="text-gray-600 mt-2 text-lg font-bold">${invData.InvID}</p>
                 
-                <!-- KUNCI FIX BOX HILANG: Menggunakan Inline Styles absolut -->
-                <div style="margin-top: 15px; background-color: #eef2ff; border: 1px solid #c7d2fe; padding: 12px; border-radius: 6px; display: inline-block; min-width: 250px;">
-                    <p style="font-weight: bold; font-size: 12px; color: #312e81; margin-bottom: 4px;">Link Akses E-Invoice Klien:</p>
-                    <p style="font-family: monospace; color: #2563eb; font-size: 12px; margin-bottom: 8px;">${pubUrl}</p>
-                    <p style="font-size: 12px; color: #1e1b4b;">PIN AKSES: <span style="font-weight: bold; font-size: 18px; color: #4338ca; letter-spacing: 3px;">${invData.ViewCode}</span></p>
+                <!-- PERBAIKAN: Menggunakan div, melimitasi width, dan memaksa word-break pada URL -->
+                <div style="margin-top: 15px; background-color: #eef2ff; border: 1px solid #c7d2fe; padding: 12px; border-radius: 6px; width: 340px; max-width: 100%;">
+                    <div style="font-weight: bold; font-size: 12px; color: #312e81; margin-bottom: 6px;">Link Akses E-Invoice Klien:</div>
+                    <div style="font-family: monospace; color: #2563eb; font-size: 11px; margin-bottom: 10px; word-break: break-all; line-height: 1.4;">${pubUrl}</div>
+                    <div style="font-size: 12px; color: #1e1b4b; font-weight: bold;">PIN AKSES: <span style="font-size: 18px; color: #4338ca; letter-spacing: 2px;">${invData.ViewCode}</span></div>
                 </div>
 
             </div>
