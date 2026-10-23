@@ -36,6 +36,23 @@ function getLocalDate() {
     return d.toISOString().substring(0, 10);
 }
 
+// Helper Penangkal Timezone untuk data dari History
+function formatTgl(dateStr) {
+    if (!dateStr) return "-";
+    
+    // Jika format sudah murni Teks (YYYY-MM-DD) dari perbaikan backend sebelumnya
+    if (dateStr.length === 10) return dateStr;
+    
+    // Jika data berupa format UTC ISO (mengandung 'T' dan 'Z')
+    // Kita panggil ulang dengan new Date() agar browser otomatis menggesernya ke GMT+7
+    if (dateStr.includes('T')) {
+        const d = new Date(dateStr);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    
+    return String(dateStr).substring(0, 10);
+}
+
 function callAPI(action, data) {
     document.getElementById('loading').classList.remove('hidden');
     const token = localStorage.getItem('token'); // Tarik Token
@@ -386,7 +403,7 @@ function fetchHistory(type) {
                         <td class="p-2 font-bold">${q.QuoteID}</td>
                         <td class="p-2 text-sm">${q.ToName}</td>
                         <td class="p-2 text-xs truncate max-w-xs">${q.Description || '-'}</td>
-                        <td class="p-2 text-sm">${q.Date.substring(0,10)}</td>
+                        <td class="p-2 text-sm">${formatTgl(q.Date)}</td>
                         <td class="p-2 text-right font-bold text-blue-700 font-mono">Rp ${formatRupiah(q.Total)}</td>
                         <td class="p-2 text-center">
                             <button onclick="previewHistoryQuote(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat PDF</button>
@@ -419,7 +436,7 @@ function fetchHistory(type) {
                     tbody.innerHTML += `<tr class="border-b hover:bg-indigo-50">
                         <td class="p-2 font-bold">${inv.InvID}</td>
                         <td class="p-2 text-xs text-gray-500">${inv.QuoteID || '-'}</td>
-                        <td class="p-2 text-sm">${inv.Date.substring(0,10)}</td>
+                        <td class="p-2 text-sm">${formatTgl(inv.Date)}</td>
                         <td class="p-2 text-right font-bold text-indigo-700 font-mono">Rp ${formatRupiah(inv.Total)}</td>
                         <td class="p-2 text-center">
                             <div class="text-xs mb-1 font-bold text-green-700 border bg-green-50 rounded p-1 inline-block">PIN: ${inv.ViewCode}</div><br>
@@ -465,7 +482,7 @@ function buildQuotePDF(qData, items, sender) {
                 <h2 class="font-bold text-xl">${sender.name}</h2>
                 <p class="text-sm whitespace-pre-line">${sender.address}</p>
                 <p class="text-sm">Telp: ${sender.phone}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${qData.Date.substring(0,10)}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${formatTgl(qData.Date)}</p>
             </div>
         </div>
 
@@ -577,7 +594,7 @@ function buildInvoicePDF(invData, items, sender) {
                 <h2 class="font-bold text-xl">${sender.name}</h2>
                 <p class="text-sm whitespace-pre-line">${sender.address}</p>
                 <p class="text-sm">Telp: ${sender.phone}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${invData.Date.substring(0,10)}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${formatTgl(invData.Date)}</p>
             </div>
         </div>
         
