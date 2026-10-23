@@ -1,5 +1,5 @@
 // GANTI DENGAN URL DEPLOYMENT BARU ANDA YANG TELAH DI-UPDATE!
-const API_URL = "https://script.google.com/macros/s/AKfycbwkXo-QvX9KU-LPBXU6bbBukUdKMHycrWy0CI9K-Hkl6lxbQs2nN-OE5h9n4GFirimF/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbz6Nnk7Lm_GEd3PrBjhqY0dNqFl6azfNMPAyIMWAJ5gwgh3OCzfoCKN24sml60mGCov/exec"; 
 
 let masterItems = [];
 let bankAccounts = [];
@@ -31,10 +31,19 @@ if (viewDocId) {
 
 function callAPI(action, data) {
     document.getElementById('loading').classList.remove('hidden');
+    const token = localStorage.getItem('token'); // Tarik Token
+    
     return fetch(API_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: action, data: data }),
+        body: JSON.stringify({ action: action, data: data, token: token }), // Kirim Token ke Backend
     }).then(res => res.json())
+      .then(res => {
+          if (res.status === 'error' && res.message.includes('Unauthorized')) {
+              alert('Sesi Anda telah habis atau tidak valid. Silakan login kembali.');
+              logout();
+          }
+          return res;
+      })
       .finally(() => document.getElementById('loading').classList.add('hidden'));
 }
 
@@ -118,7 +127,6 @@ function fetchBanks() {
     });
 }
 
-// --- QUOTATION LOGIC ---
 function addQuoteItem() {
     const itemId = document.getElementById('q_itemSelect').value;
     const qty = parseFloat(document.getElementById('q_qty').value) || 1;
@@ -178,16 +186,12 @@ function generateQuotation() {
         phone: document.getElementById('q_phone').value,
         address: document.getElementById('q_address').value,
         desc: document.getElementById('q_desc').value,
-        items: {
-            itemsList: quoteItems,
-            senderInfo: senderData
-        },
+        items: { itemsList: quoteItems, senderInfo: senderData },
         total: total
     };
 
     callAPI('saveQuotation', data).then(res => {
         if(res.status === 'error') return alert("Gagal menyimpan Quotation: " + res.message);
-        
         alert('Quotation Sukses dibuat! ID: ' + res.data.id);
         
         quoteItems = []; renderQuoteTable(); 
@@ -204,12 +208,9 @@ function generateQuotation() {
     });
 }
 
-
-// --- INVOICE LOGIC & QUOTATION DROPDOWN ---
 function populateQuoteDropdown() {
     const select = document.getElementById('i_quoteRef');
     if (!select) return;
-    
     select.innerHTML = '<option value="">-- Pilih Quotation ID --</option>';
     historyQuotes.forEach(q => {
         select.innerHTML += `<option value="${q.QuoteID}">${q.QuoteID} | ${q.ToName} | Rp ${formatRupiah(q.Total)}</option>`;
@@ -230,7 +231,6 @@ function loadQuoteIntoInvoice() {
             invoiceItems = parsed.itemsList || [];
             activeSenderInfo = parsed.senderInfo || { name: 'PT NAMA BISNIS ANDA', phone: '', address: '' };
         }
-        
         renderInvoiceTable();
     } else {
         alert(`Quotation ${qID} tidak ditemukan di sistem.`);
@@ -271,7 +271,6 @@ function calculateInvoice() {
     
     invTaxPPN = isPPN ? Math.round(invSubTotal * 0.11) : 0;
     
-    // PERBAIKAN LOGIKA GROSS UP 2% DAN 2.5%
     if (pphStatus === 'dipotong_2') {
         invTaxPPh = Math.round(invSubTotal * 0.02);
         invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
@@ -312,16 +311,12 @@ async function generateInvoice() {
         if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
 
         const notes = document.getElementById('i_notes').value;
-        
         const fileElement = document.getElementById('i_file');
         const fileInput = (fileElement && fileElement.files) ? fileElement.files[0] : null;
 
         const data = {
             quoteId: quoteRef, 
-            items: {
-                itemsList: invoiceItems,
-                senderInfo: activeSenderInfo
-            }, 
+            items: { itemsList: invoiceItems, senderInfo: activeSenderInfo }, 
             subTotal: invSubTotal, taxPPN: invTaxPPN, taxPPh: invTaxPPh, total: invGrandTotal, 
             bankId: bank, notes: notes
         };
@@ -362,7 +357,6 @@ async function generateInvoice() {
     }
 }
 
-// --- HISTORY FETCHING & RENDERING ---
 function fetchHistory(type) {
     if(type === 'quote') {
         document.getElementById('history_quoteBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
@@ -392,14 +386,16 @@ function fetchHistory(type) {
     if(type === 'invoice') {
         document.getElementById('history_invoiceBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
         
-        // Memastikan Sinkronisasi Sheet Uploads didapat saat menarik data Invoice
-        callAPI('getUploads', {}).then(resUp => {
-            if(resUp.status === 'success') historyUploads = resUp.data;
-        });
-
-        callAPI('getInvoices', {}).then(res => {
-            if(res.status === 'success') {
-                historyInvoices = res.data.slice().reverse();
+        // Perbaikan Race Condition: Request berjalan paralel dan diproses bersamaan
+        Promise.all([
+            callAPI('getUploads', {}),
+            callAPI('getInvoices', {})
+        ]).then(([resUp, resInv]) => {
+            if(resUp && resUp.status === 'success') {
+                historyUploads = resUp.data;
+            }
+            if(resInv && resInv.status === 'success') {
+                historyInvoices = resInv.data.slice().reverse();
                 const tbody = document.getElementById('history_invoiceBody');
                 tbody.innerHTML = historyInvoices.length ? '' : '<tr><td colspan="6" class="text-center p-4">Tidak ada data</td></tr>';
                 
@@ -429,7 +425,6 @@ function previewHistoryQuote(index) {
     let parsed = JSON.parse(q.ItemsJSON || '[]');
     let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
     let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
-    
     buildQuotePDF(q, items, sender);
 }
 
@@ -438,12 +433,9 @@ function previewHistoryInvoice(index) {
     let parsed = JSON.parse(inv.ItemsJSON || '[]');
     let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
     let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
-    
     buildInvoicePDF(inv, items, sender);
 }
 
-
-// --- PDF RENDERER & MODAL HANDLER ---
 let activeDocName = "Dokumen";
 
 function buildQuotePDF(qData, items, sender) {
@@ -520,7 +512,6 @@ function buildInvoicePDF(invData, items, sender) {
         taxHTML += `<div class="flex justify-between mb-2"><span>PPN (11%):</span> <span>Rp ${formatRupiah(invData.TaxPPN)}</span></div>`;
     }
     
-    // Logika Pendeteksi Jenis PPh & Ratenya secara dinamis
     if(parseInt(invData.TaxPPh) > 0) {
         const sub = parseInt(invData.SubTotal);
         const ppn = parseInt(invData.TaxPPN);
@@ -535,7 +526,6 @@ function buildInvoicePDF(invData, items, sender) {
         if (isDipotong) impliedRate = (pph / sub) * 100;
         if (isDitanggung) impliedRate = (pph / (sub + pph)) * 100;
         
-        // Pengecekan toleransi pembulatan untuk 2.5%
         if (Math.abs(impliedRate - 2.5) < 0.1) rateStr = "2.5%";
 
         if(isDipotong) {
@@ -547,12 +537,10 @@ function buildInvoicePDF(invData, items, sender) {
         }
     }
 
-    // Menampilkan Sinkronisasi URL File Upload dari Drive jika tersedia
     const uploadRec = historyUploads.find(u => u.RefID === invData.InvID);
     const finalFileUrl = uploadRec ? uploadRec.FileURL : (invData.UploadedFileURL || null);
     const uploadHTML = finalFileUrl ? `<p class="text-sm mt-3 pt-3 border-t border-gray-200"><b>Lampiran Bukti Pekerjaan:</b> <br> <a href="${finalFileUrl}" target="_blank" class="text-blue-600 underline break-all">${finalFileUrl}</a></p>` : '';
 
-    // Menyembunyikan text "Catatan:" sepenuhnya jika user tidak mengisi atau hanya mengisi -
     const notesStr = (invData.Notes || '').trim();
     const notesHTML = (notesStr !== '' && notesStr !== '-') ? `<p class="text-sm mt-3 whitespace-pre-line">Catatan:<br>${notesStr}</p>` : '';
 
