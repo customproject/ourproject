@@ -1,5 +1,5 @@
 // GANTI DENGAN URL DEPLOYMENT BARU ANDA YANG TELAH DI-UPDATE!
-const API_URL = "https://script.google.com/macros/s/AKfycbztDUbiPpCZ0x-dndTlTk1mn-EdPaTdfp48IFoeiR18_O3IHe-a5rGPYME-LGqHQWE9/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbyCMDNioqezTB_pXcG6eeGT4soS0_VmE47k-LRER1gsxHoTFe3QxGxYP1RdZ6mikhKS/exec"; 
 
 let masterItems = [];
 let bankAccounts = [];
@@ -199,8 +199,13 @@ function generateQuotation() {
         document.getElementById('q_address').value = '';
         document.getElementById('q_desc').value = '';
         
-        const previewData = { ...data, QuoteID: res.data.id, Date: new Date().toISOString() };
-        previewData.ItemsJSON = JSON.stringify(data.items); 
+        // Membuat string tanggal lokal (Hari ini sesuai jam perangkat)
+        const d = new Date();
+        const localDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
+        // Menggunakan localDate alih-alih toISOString()
+        const previewData = { ...data, QuoteID: res.data.id, Date: localDate };
+        previewData.ItemsJSON = JSON.stringify(data.items);
         
         fetchHistory('quote'); 
         buildQuotePDF(previewData, data.items.itemsList, senderData); 
@@ -621,11 +626,12 @@ function closePDFModal() {
 function downloadPDF(elementId, fileName) {
     const element = document.getElementById(elementId);
     const opt = {
-        margin:       [5, 0, 10, 0], // Memberi jarak margin atas bawah
+        margin:       [5, 0, 10, 0],
         filename:     fileName + '.pdf',
         image:        { type: 'jpeg', quality: 1 },
-        // KUNCI FIX: windowWidth memaksa library membaca dokumen layaknya di layar desktop lebar
-        html2canvas:  { scale: 2, useCORS: true, windowWidth: 1200 }, 
+        // KUNCI FIX: Hapus windowWidth, lalu tambahkan scrollX: 0 dan scrollY: 0 
+        // agar mesin selalu menangkap pas dari ujung kiri atas elemen PDF.
+        html2canvas:  { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     html2pdf().set(opt).from(element).save();
