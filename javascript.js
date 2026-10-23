@@ -117,7 +117,6 @@ function fetchBanks() {
     });
 }
 
-// --- QUOTATION LOGIC ---
 function addQuoteItem() {
     const itemId = document.getElementById('q_itemSelect').value;
     const qty = parseFloat(document.getElementById('q_qty').value) || 1;
@@ -203,8 +202,6 @@ function generateQuotation() {
     });
 }
 
-
-// --- INVOICE LOGIC & QUOTATION DROPDOWN ---
 function populateQuoteDropdown() {
     const select = document.getElementById('i_quoteRef');
     if (!select) return;
@@ -316,7 +313,6 @@ function generateInvoice() {
         alert('Invoice Sukses Dibuat! PIN Akses: ' + res.data.pin);
         fetchHistory('invoice'); 
         
-        // Memastikan Date untuk preview adalah tanggal pembuatan saat ini
         const previewData = {
             InvID: res.data.id, Date: new Date().toISOString(), ViewCode: res.data.pin,
             SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
@@ -331,7 +327,6 @@ function generateInvoice() {
     });
 }
 
-// --- HISTORY FETCHING & RENDERING ---
 function fetchHistory(type) {
     if(type === 'quote') {
         document.getElementById('history_quoteBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
@@ -349,7 +344,7 @@ function fetchHistory(type) {
                         <td class="p-2 text-sm">${q.Date.substring(0,10)}</td>
                         <td class="p-2 text-right font-bold text-blue-700 font-mono">Rp ${formatRupiah(q.Total)}</td>
                         <td class="p-2 text-center">
-                            <button onclick="previewHistoryQuote(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat PDF</button>
+                            <button onclick="previewHistoryQuote(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat / Print PDF</button>
                         </td>
                     </tr>`;
                 });
@@ -379,7 +374,7 @@ function fetchHistory(type) {
                             <button onclick="navigator.clipboard.writeText('${pubUrl}'); alert('Link disalin!')" class="text-xs bg-gray-200 border px-2 py-1 rounded hover:bg-gray-300">Copy Link</button>
                         </td>
                         <td class="p-2 text-center">
-                            <button onclick="previewHistoryInvoice(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat PDF</button>
+                            <button onclick="previewHistoryInvoice(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat / Print PDF</button>
                         </td>
                     </tr>`;
                 });
@@ -407,11 +402,10 @@ function previewHistoryInvoice(index) {
 }
 
 
-// --- PDF RENDERER & MODAL HANDLER ---
-let activeDocName = "Dokumen";
-
+// --- PDF RENDERER (DIPERSIAPKAN UNTUK WINDOW.PRINT) ---
 function buildQuotePDF(qData, items, sender) {
-    activeDocName = `Quotation_${qData.QuoteID}`;
+    // Ubah title dokumen agar saat disave as PDF namanya sesuai
+    document.title = `Quotation_${qData.QuoteID}`;
     const html = `
         <div class="flex justify-between items-start mb-8 border-b-4 border-blue-800 pb-4">
             <div>
@@ -456,12 +450,12 @@ function buildQuotePDF(qData, items, sender) {
         </table>
         
         <div class="flex flex-col items-end mt-4">
-            <div class="bg-blue-800 text-white p-4 rounded min-w-[300px] mb-4">
+            <div class="bg-blue-800 text-white p-4 rounded min-w-[300px] mb-4 print:bg-blue-800 print:text-white print:-webkit-print-color-adjust: exact;">
                 <div class="flex justify-between font-bold text-xl"><span>GRAND TOTAL:</span> <span>Rp ${formatRupiah(qData.Total)}</span></div>
             </div>
         </div>
         
-        <div class="mt-4 text-xs text-gray-700 bg-gray-100 p-3 rounded">
+        <div class="mt-4 text-xs text-gray-700 bg-gray-100 p-3 rounded print:bg-gray-100 print:-webkit-print-color-adjust: exact;">
             <strong>Catatan Khusus:</strong><br>
             *Biaya jasa perseorangan, belum termasuk pajak. Bila dikenakan pajak, maka harga di atas merupakan angka bersih yang harus diterima penyedia jasa.
         </div>
@@ -476,7 +470,8 @@ function buildQuotePDF(qData, items, sender) {
 }
 
 function buildInvoicePDF(invData, items, sender) {
-    activeDocName = `Invoice_${invData.InvID}`;
+    // Ubah title dokumen agar saat disave as PDF namanya sesuai
+    document.title = `Invoice_${invData.InvID}`;
     
     let taxHTML = '';
     if(parseInt(invData.TaxPPN) > 0) {
@@ -521,13 +516,12 @@ function buildInvoicePDF(invData, items, sender) {
                 <h2 class="font-bold text-xl">${sender.name}</h2>
                 <p class="text-sm whitespace-pre-line">${sender.address}</p>
                 <p class="text-sm">Telp: ${sender.phone}</p>
-                <!-- Menampilkan tanggal penerbitan yang sah dari object invData.Date -->
                 <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${invData.Date ? invData.Date.substring(0,10) : '-'}</p>
             </div>
         </div>
         
         <table class="w-full text-left mt-6 mb-6 border-collapse text-sm border border-gray-400">
-            <tr class="bg-indigo-100 text-indigo-900">
+            <tr class="bg-indigo-100 text-indigo-900 print:bg-indigo-100 print:-webkit-print-color-adjust: exact;">
                 <th class="p-2 border border-gray-400 font-bold text-center w-8">No</th>
                 <th class="p-2 border border-gray-400 font-bold">Deskripsi Penagihan</th>
                 <th class="p-2 border border-gray-400 font-bold text-center w-12">Qty</th>
@@ -555,7 +549,7 @@ function buildInvoicePDF(invData, items, sender) {
             </div>
         </div>
         
-        <div class="mt-12 border-2 border-gray-300 p-4 bg-gray-50 rounded">
+        <div class="mt-12 border-2 border-gray-300 p-4 bg-gray-50 rounded print:bg-gray-50 print:-webkit-print-color-adjust: exact;">
             <p class="font-bold text-gray-800 mb-2">Informasi Pembayaran:</p>
             <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID}</p>
             ${notesHTML}
@@ -564,41 +558,29 @@ function buildInvoicePDF(invData, items, sender) {
         <div class="mt-12 text-center text-sm text-gray-500">Terima kasih atas kepercayaan Anda bekerja sama dengan kami.</div>
     `;
     
-    // Tampilkan di Render Area (yang sama dengan public view jika di public)
-    if(document.getElementById('renderedPublicDoc')) {
-        document.getElementById('renderedPublicDoc').innerHTML = html;
+    if(document.getElementById('publicViewArea') && !document.getElementById('publicViewArea').classList.contains('hidden')) {
+        // Tampilkan di area public
+        document.getElementById('pdfRenderArea').innerHTML = html;
     } else {
+        // Tampilkan di modal Admin
         openPDFModal(html);
     }
 }
 
 function openPDFModal(htmlContent) {
-    document.getElementById('pdfRenderArea').innerHTML = htmlContent;
+    document.getElementById('adminPdfRenderArea').innerHTML = htmlContent;
+    
+    // Assign juga ke pdfRenderArea (yang akan di-print oleh CSS @media print)
+    const renderDiv = document.getElementById('pdfRenderArea');
+    if(renderDiv) renderDiv.innerHTML = htmlContent;
+    
     document.getElementById('pdfModal').classList.remove('hidden');
 }
 
 function closePDFModal() {
     document.getElementById('pdfModal').classList.add('hidden');
-}
-
-// PERBAIKAN FATAL HTML2PDF CROPPING BUG
-function downloadPDF(elementId, fileName) {
-    const element = document.getElementById(elementId);
-    
-    // Set margin ke 0 karena kanvas kita (div putih) telah mengunci ukuran A4 secara mandiri.
-    // Ditambahkan property scrollY: 0 dan scrollX: 0 untuk mencegah kamera tergeser akibat modal popup.
-    const opt = {
-        margin:       0, 
-        filename:     fileName + '.pdf',
-        image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 2, useCORS: true, scrollY: 0, scrollX: 0 }, 
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-}
-
-function downloadActivePDF() {
-    downloadPDF('pdfRenderArea', activeDocName);
+    // Kembalikan nama dokumen ke default
+    document.title = "Sistem ERP & Invoicing";
 }
 
 function unlockPublicDoc() {
@@ -613,7 +595,6 @@ function unlockPublicDoc() {
             let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
             let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
             
-            // Build Invoice PDF akan otomatis mengisi ke div 'renderedPublicDoc'
             buildInvoicePDF(data, items, sender);
         } else {
             alert('PIN Salah atau Dokumen tidak ditemukan!');

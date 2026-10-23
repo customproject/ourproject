@@ -5,7 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem ERP & Invoicing</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        /* CSS KHUSUS UNTUK PRINT / SAVE AS PDF DARI BROWSER */
+        @media print {
+            body * {
+                visibility: hidden; /* Sembunyikan semuanya */
+            }
+            #pdfRenderArea, #pdfRenderArea * {
+                visibility: visible; /* Tampilkan hanya isi dokumen */
+            }
+            #pdfRenderArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%; /* Gunakan full width kertas */
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+            }
+            /* Hilangkan border & background kelabu dari body/modal */
+            #pdfModal, #publicDocContent {
+                background: white !important;
+            }
+            /* Paksa margin kertas A4 */
+            @page {
+                size: A4 portrait;
+                margin: 10mm;
+            }
+        }
+    </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
 
@@ -22,20 +50,20 @@
             <button onclick="unlockPublicDoc()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded font-bold transition">Buka Dokumen</button>
         </div>
         
-        <div id="publicDocContent" class="hidden w-full max-w-5xl flex flex-col items-center">
-            <button onclick="downloadPDF('renderedPublicDoc', 'Invoice_Public')" class="mb-4 bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded font-bold shadow-md print:hidden flex items-center gap-2">
-                Download PDF A4
+        <div id="publicDocContent" class="hidden w-full max-w-4xl flex flex-col items-center">
+            <button onclick="window.print()" class="mb-4 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-bold shadow-md print:hidden flex items-center gap-2">
+                Cetak / Save PDF
             </button>
-            <div class="overflow-x-auto w-full flex justify-center bg-gray-300 p-8 rounded-lg shadow-inner">
-                <!-- Menggunakan canvas statis A4 -->
-                <div id="renderedPublicDoc" class="bg-white p-10 shadow-lg text-gray-900 w-[210mm] min-h-[297mm] box-border shrink-0"></div>
+            <div class="w-full flex justify-center bg-gray-300 p-8 rounded-lg shadow-inner print:bg-white print:p-0">
+                <!-- ID pdfRenderArea dipindah ke sini saat mode public agar script print CSS berfungsi -->
+                <div id="pdfRenderArea" class="bg-white p-10 shadow-lg text-gray-900 w-full max-w-[210mm] box-border"></div>
             </div>
         </div>
     </div>
 
     <!-- AREA ADMIN -->
     <div id="adminArea" class="hidden">
-        <div id="loginScreen" class="min-h-screen flex items-center justify-center">
+        <div id="loginScreen" class="min-h-screen flex items-center justify-center print:hidden">
             <div class="bg-white p-8 rounded shadow-lg w-96 border-t-4 border-blue-600">
                 <h2 class="text-2xl font-bold mb-6 text-center">Admin Login</h2>
                 <input type="text" id="username" placeholder="Username" class="w-full border p-2 mb-4 rounded bg-gray-50">
@@ -44,8 +72,8 @@
             </div>
         </div>
 
-        <div id="dashboardScreen" class="hidden">
-            <nav class="bg-blue-800 text-white p-4 shadow-md flex justify-between items-center print:hidden sticky top-0 z-40">
+        <div id="dashboardScreen" class="hidden print:hidden">
+            <nav class="bg-blue-800 text-white p-4 shadow-md flex justify-between items-center sticky top-0 z-40">
                 <div class="font-bold text-xl tracking-wide">ERP / Invoicing</div>
                 <div class="space-x-2">
                     <button onclick="showPage('master')" class="px-3 py-1 rounded hover:bg-blue-700 font-medium">Master Item</button>
@@ -241,22 +269,24 @@
         </div>
     </div>
 
-    <!-- MODAL PDF PREVIEW -->
-    <!-- Diperbarui agar modal bisa discroll ke ujung tanpa memotong gambar di kanvas -->
-    <div id="pdfModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 z-50 overflow-y-auto">
-        <div class="min-h-screen flex items-start justify-center p-4 py-10">
-            <div class="bg-gray-200 rounded-lg shadow-2xl max-w-4xl w-full flex flex-col">
-                <div class="bg-gray-800 text-white p-4 rounded-t-lg flex justify-between items-center sticky top-0 z-10">
+    <!-- MODAL PDF PREVIEW ADMIN -->
+    <div id="pdfModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 z-50 overflow-y-auto print:bg-white print:overflow-visible print:inset-auto print:relative">
+        <div class="min-h-screen flex items-start justify-center p-4 py-10 print:min-h-0 print:p-0 print:block">
+            <div class="bg-gray-200 rounded-lg shadow-2xl max-w-4xl w-full flex flex-col print:shadow-none print:bg-white print:block">
+                
+                <div class="bg-gray-800 text-white p-4 rounded-t-lg flex justify-between items-center sticky top-0 z-10 print:hidden">
                     <h3 class="text-xl font-bold" id="modalTitle">Preview Dokumen</h3>
                     <div class="space-x-2">
-                        <button onclick="downloadActivePDF()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-bold shadow">Download PDF</button>
+                        <button onclick="window.print()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-bold shadow">Cetak / Save PDF</button>
                         <button onclick="closePDFModal()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded font-bold">Tutup</button>
                     </div>
                 </div>
-                <div class="p-8 overflow-x-auto flex justify-center bg-gray-300">
-                    <!-- Format A4 statis agar mesin PDF membacanya secara utuh tanpa potong -->
-                    <div id="pdfRenderArea" class="bg-white p-10 shadow-lg text-gray-900 w-[210mm] min-h-[297mm] box-border shrink-0"></div>
+                
+                <div class="p-8 overflow-x-auto flex justify-center bg-gray-300 print:p-0 print:bg-white print:block">
+                    <!-- Target Area Print -->
+                    <div id="adminPdfRenderArea" class="bg-white p-10 shadow-lg text-gray-900 w-full max-w-[210mm] box-border print:shadow-none print:max-w-none print:w-full print:p-0"></div>
                 </div>
+                
             </div>
         </div>
     </div>
