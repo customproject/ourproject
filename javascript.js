@@ -1,3 +1,4 @@
+// GANTI DENGAN URL DEPLOYMENT BARU ANDA YANG TELAH DI-UPDATE!
 const API_URL = "https://script.google.com/macros/s/AKfycbwkXo-QvX9KU-LPBXU6bbBukUdKMHycrWy0CI9K-Hkl6lxbQs2nN-OE5h9n4GFirimF/exec"; 
 
 let masterItems = [];
@@ -6,6 +7,7 @@ let quoteItems = [];
 let invoiceItems = []; 
 let historyQuotes = [];
 let historyInvoices = [];
+let historyUploads = []; 
 let activeSenderInfo = null;
 
 let invSubTotal = 0;
@@ -116,6 +118,7 @@ function fetchBanks() {
     });
 }
 
+// --- QUOTATION LOGIC ---
 function addQuoteItem() {
     const itemId = document.getElementById('q_itemSelect').value;
     const qty = parseFloat(document.getElementById('q_qty').value) || 1;
@@ -201,6 +204,8 @@ function generateQuotation() {
     });
 }
 
+
+// --- INVOICE LOGIC & QUOTATION DROPDOWN ---
 function populateQuoteDropdown() {
     const select = document.getElementById('i_quoteRef');
     if (!select) return;
@@ -228,7 +233,7 @@ function loadQuoteIntoInvoice() {
         
         renderInvoiceTable();
     } else {
-        alert(`Quotation ${qID} tidak ditemukan di sistem. Harap direfresh.`);
+        alert(`Quotation ${qID} tidak ditemukan di sistem.`);
     }
 }
 
@@ -266,12 +271,21 @@ function calculateInvoice() {
     
     invTaxPPN = isPPN ? Math.round(invSubTotal * 0.11) : 0;
     
-    if (pphStatus === 'dipotong') {
+    // PERBAIKAN LOGIKA GROSS UP 2% DAN 2.5%
+    if (pphStatus === 'dipotong_2') {
         invTaxPPh = Math.round(invSubTotal * 0.02);
         invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
-    } else if (pphStatus === 'ditanggung') {
-        invTaxPPh = Math.round(invSubTotal * 0.02); 
-        invGrandTotal = invSubTotal + invTaxPPN;
+    } else if (pphStatus === 'ditanggung_2') {
+        const gross = invSubTotal / 0.98;
+        invTaxPPh = Math.round(gross - invSubTotal);
+        invGrandTotal = invSubTotal + invTaxPPN + invTaxPPh;
+    } else if (pphStatus === 'dipotong_25') {
+        invTaxPPh = Math.round(invSubTotal * 0.025);
+        invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
+    } else if (pphStatus === 'ditanggung_25') {
+        const gross = invSubTotal / 0.975;
+        invTaxPPh = Math.round(gross - invSubTotal);
+        invGrandTotal = invSubTotal + invTaxPPN + invTaxPPh;
     } else {
         invTaxPPh = 0;
         invGrandTotal = invSubTotal + invTaxPPN;
@@ -313,16 +327,17 @@ async function generateInvoice() {
         };
 
         const res = await callAPI('saveInvoice', data);
+        if(res.status === 'error') throw new Error(res.message); 
         
-        if(res.status === 'error') {
-            throw new Error(res.message); 
-        }
-        
+        let uploadedFileUrl = null;
         if(fileInput) {
             const b64 = await getBase64(fileInput);
-            await callAPI('uploadFile', {
+            const uploadRes = await callAPI('uploadFile', {
                 refId: res.data.id, filename: fileInput.name, mimeType: fileInput.type, base64: b64
             });
+            if(uploadRes.status === 'success') {
+                uploadedFileUrl = uploadRes.data.fileUrl;
+            }
         }
 
         alert('Invoice Sukses Dibuat! PIN Akses: ' + res.data.pin);
@@ -331,7 +346,7 @@ async function generateInvoice() {
         const previewData = {
             InvID: res.data.id, Date: new Date().toISOString(), ViewCode: res.data.pin,
             SubTotal: invSubTotal, TaxPPN: invTaxPPN, TaxPPh: invTaxPPh, Total: invGrandTotal,
-            Notes: notes, BankID: bank
+            Notes: notes, BankID: bank, UploadedFileURL: uploadedFileUrl
         };
         buildInvoicePDF(previewData, invoiceItems, activeSenderInfo);
         
@@ -347,6 +362,7 @@ async function generateInvoice() {
     }
 }
 
+// --- HISTORY FETCHING & RENDERING ---
 function fetchHistory(type) {
     if(type === 'quote') {
         document.getElementById('history_quoteBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
@@ -368,7 +384,6 @@ function fetchHistory(type) {
                         </td>
                     </tr>`;
                 });
-
                 populateQuoteDropdown();
             }
         });
@@ -376,6 +391,12 @@ function fetchHistory(type) {
 
     if(type === 'invoice') {
         document.getElementById('history_invoiceBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
+        
+        // Memastikan Sinkronisasi Sheet Uploads didapat saat menarik data Invoice
+        callAPI('getUploads', {}).then(resUp => {
+            if(resUp.status === 'success') historyUploads = resUp.data;
+        });
+
         callAPI('getInvoices', {}).then(res => {
             if(res.status === 'success') {
                 historyInvoices = res.data.slice().reverse();
@@ -421,6 +442,8 @@ function previewHistoryInvoice(index) {
     buildInvoicePDF(inv, items, sender);
 }
 
+
+// --- PDF RENDERER & MODAL HANDLER ---
 let activeDocName = "Dokumen";
 
 function buildQuotePDF(qData, items, sender) {
@@ -497,16 +520,41 @@ function buildInvoicePDF(invData, items, sender) {
         taxHTML += `<div class="flex justify-between mb-2"><span>PPN (11%):</span> <span>Rp ${formatRupiah(invData.TaxPPN)}</span></div>`;
     }
     
+    // Logika Pendeteksi Jenis PPh & Ratenya secara dinamis
     if(parseInt(invData.TaxPPh) > 0) {
-        const expectedDipotongTotal = parseInt(invData.SubTotal) + parseInt(invData.TaxPPN) - parseInt(invData.TaxPPh);
-        const isDipotong = (parseInt(invData.Total) === expectedDipotongTotal);
+        const sub = parseInt(invData.SubTotal);
+        const ppn = parseInt(invData.TaxPPN);
+        const pph = parseInt(invData.TaxPPh);
+        const tot = parseInt(invData.Total);
+
+        const isDipotong = (tot === (sub + ppn - pph));
+        const isDitanggung = (tot === (sub + ppn + pph));
+
+        let rateStr = "2%";
+        let impliedRate = 0;
+        if (isDipotong) impliedRate = (pph / sub) * 100;
+        if (isDitanggung) impliedRate = (pph / (sub + pph)) * 100;
+        
+        // Pengecekan toleransi pembulatan untuk 2.5%
+        if (Math.abs(impliedRate - 2.5) < 0.1) rateStr = "2.5%";
 
         if(isDipotong) {
-            taxHTML += `<div class="flex justify-between mb-2 text-red-600 border-b border-gray-300 pb-2"><span>Dipotong PPh 23 (2%):</span> <span>(Rp ${formatRupiah(invData.TaxPPh)})</span></div>`;
+            taxHTML += `<div class="flex justify-between mb-2 text-red-600 border-b border-gray-300 pb-2"><span>Dipotong PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
+        } else if(isDitanggung) {
+            taxHTML += `<div class="flex justify-between mb-2 text-green-700 border-b border-gray-300 pb-2"><span>Ditambah PPh (${rateStr}) Gross Up:</span> <span>Rp ${formatRupiah(pph)}</span></div>`;
         } else {
-            taxHTML += `<div class="flex justify-between mb-2 text-green-700 text-xs italic border-b border-gray-300 pb-2"><span>*Telah Ditanggung Pembeli (PPh 23 2%)</span> <span>(Rp ${formatRupiah(invData.TaxPPh)})</span></div>`;
+            taxHTML += `<div class="flex justify-between mb-2 text-gray-600 border-b border-gray-300 pb-2"><span>Info PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
         }
     }
+
+    // Menampilkan Sinkronisasi URL File Upload dari Drive jika tersedia
+    const uploadRec = historyUploads.find(u => u.RefID === invData.InvID);
+    const finalFileUrl = uploadRec ? uploadRec.FileURL : (invData.UploadedFileURL || null);
+    const uploadHTML = finalFileUrl ? `<p class="text-sm mt-3 pt-3 border-t border-gray-200"><b>Lampiran Bukti Pekerjaan:</b> <br> <a href="${finalFileUrl}" target="_blank" class="text-blue-600 underline break-all">${finalFileUrl}</a></p>` : '';
+
+    // Menyembunyikan text "Catatan:" sepenuhnya jika user tidak mengisi atau hanya mengisi -
+    const notesStr = (invData.Notes || '').trim();
+    const notesHTML = (notesStr !== '' && notesStr !== '-') ? `<p class="text-sm mt-3 whitespace-pre-line">Catatan:<br>${notesStr}</p>` : '';
 
     const html = `
         <div class="flex justify-between items-start mb-8 border-b-4 border-indigo-800 pb-4">
@@ -559,7 +607,8 @@ function buildInvoicePDF(invData, items, sender) {
         <div class="mt-12 border-2 border-gray-300 p-4 bg-gray-50 rounded">
             <p class="font-bold text-gray-800 mb-2">Informasi Pembayaran:</p>
             <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID}</p>
-            <p class="text-sm mt-3 whitespace-pre-line">Catatan: ${invData.Notes || '-'}</p>
+            ${notesHTML}
+            ${uploadHTML}
         </div>
         
         <div class="mt-12 text-center text-sm text-gray-500">Terima kasih atas kepercayaan Anda bekerja sama dengan kami.</div>
