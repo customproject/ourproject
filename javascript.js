@@ -1,4 +1,3 @@
-// GANTI DENGAN URL DEPLOYMENT BARU ANDA JIKA PERLU
 const API_URL = "https://script.google.com/macros/s/AKfycbwkXo-QvX9KU-LPBXU6bbBukUdKMHycrWy0CI9K-Hkl6lxbQs2nN-OE5h9n4GFirimF/exec"; 
 
 let masterItems = [];
@@ -226,9 +225,10 @@ function loadQuoteIntoInvoice() {
             invoiceItems = parsed.itemsList || [];
             activeSenderInfo = parsed.senderInfo || { name: 'PT NAMA BISNIS ANDA', phone: '', address: '' };
         }
+        
         renderInvoiceTable();
     } else {
-        alert(`Quotation ${qID} tidak ditemukan di sistem.`);
+        alert(`Quotation ${qID} tidak ditemukan di sistem. Harap direfresh.`);
     }
 }
 
@@ -266,20 +266,12 @@ function calculateInvoice() {
     
     invTaxPPN = isPPN ? Math.round(invSubTotal * 0.11) : 0;
     
-    if (pphStatus === 'dipotong_2') {
+    if (pphStatus === 'dipotong') {
         invTaxPPh = Math.round(invSubTotal * 0.02);
         invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
-    } else if (pphStatus === 'ditanggung_2') {
-        const gross = invSubTotal / 0.98;
-        invTaxPPh = Math.round(gross - invSubTotal);
-        invGrandTotal = invSubTotal + invTaxPPN + invTaxPPh;
-    } else if (pphStatus === 'dipotong_25') {
-        invTaxPPh = Math.round(invSubTotal * 0.025);
-        invGrandTotal = invSubTotal + invTaxPPN - invTaxPPh;
-    } else if (pphStatus === 'ditanggung_25') {
-        const gross = invSubTotal / 0.975;
-        invTaxPPh = Math.round(gross - invSubTotal);
-        invGrandTotal = invSubTotal + invTaxPPN + invTaxPPh;
+    } else if (pphStatus === 'ditanggung') {
+        invTaxPPh = Math.round(invSubTotal * 0.02); 
+        invGrandTotal = invSubTotal + invTaxPPN;
     } else {
         invTaxPPh = 0;
         invGrandTotal = invSubTotal + invTaxPPN;
@@ -288,28 +280,51 @@ function calculateInvoice() {
     document.getElementById('i_grandTotal').innerText = formatRupiah(invGrandTotal);
 }
 
-function generateInvoice() {
-    const quoteRef = document.getElementById('i_quoteRef').value;
-    if(invoiceItems.length === 0) return alert('Pilih dan tarik data dari Quotation terlebih dahulu!');
-    
-    const bank = document.getElementById('i_bank').value;
-    if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
+function getBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]); 
+        reader.onerror = error => reject(error);
+    });
+}
 
-    const notes = document.getElementById('i_notes').value;
-
-    const data = {
-        quoteId: quoteRef, 
-        items: {
-            itemsList: invoiceItems,
-            senderInfo: activeSenderInfo
-        }, 
-        subTotal: invSubTotal, taxPPN: invTaxPPN, taxPPh: invTaxPPh, total: invGrandTotal, 
-        bankId: bank, notes: notes
-    };
-
-    callAPI('saveInvoice', data).then(res => {
-        if(res.status === 'error') return alert("Terjadi kesalahan: " + res.message); 
+async function generateInvoice() {
+    try {
+        const quoteRef = document.getElementById('i_quoteRef').value;
+        if(invoiceItems.length === 0) return alert('Pilih dan tarik data dari Quotation terlebih dahulu!');
         
+        const bank = document.getElementById('i_bank').value;
+        if(!bank) return alert('Silakan pilih rekening pembayaran terlebih dahulu!');
+
+        const notes = document.getElementById('i_notes').value;
+        
+        const fileElement = document.getElementById('i_file');
+        const fileInput = (fileElement && fileElement.files) ? fileElement.files[0] : null;
+
+        const data = {
+            quoteId: quoteRef, 
+            items: {
+                itemsList: invoiceItems,
+                senderInfo: activeSenderInfo
+            }, 
+            subTotal: invSubTotal, taxPPN: invTaxPPN, taxPPh: invTaxPPh, total: invGrandTotal, 
+            bankId: bank, notes: notes
+        };
+
+        const res = await callAPI('saveInvoice', data);
+        
+        if(res.status === 'error') {
+            throw new Error(res.message); 
+        }
+        
+        if(fileInput) {
+            const b64 = await getBase64(fileInput);
+            await callAPI('uploadFile', {
+                refId: res.data.id, filename: fileInput.name, mimeType: fileInput.type, base64: b64
+            });
+        }
+
         alert('Invoice Sukses Dibuat! PIN Akses: ' + res.data.pin);
         fetchHistory('invoice'); 
         
@@ -323,8 +338,13 @@ function generateInvoice() {
         document.getElementById('i_quoteRef').value = '';
         invoiceItems = []; renderInvoiceTable();
         document.getElementById('i_notes').value = '';
+        if(fileElement) fileElement.value = '';
         document.getElementById('i_pph_status').value = 'none';
-    });
+
+    } catch (error) {
+        console.error("Invoice Error: ", error);
+        alert("Terjadi kesalahan saat memproses data: " + error.message);
+    }
 }
 
 function fetchHistory(type) {
@@ -344,10 +364,11 @@ function fetchHistory(type) {
                         <td class="p-2 text-sm">${q.Date.substring(0,10)}</td>
                         <td class="p-2 text-right font-bold text-blue-700 font-mono">Rp ${formatRupiah(q.Total)}</td>
                         <td class="p-2 text-center">
-                            <button onclick="previewHistoryQuote(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat / Print PDF</button>
+                            <button onclick="previewHistoryQuote(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat PDF</button>
                         </td>
                     </tr>`;
                 });
+
                 populateQuoteDropdown();
             }
         });
@@ -355,7 +376,6 @@ function fetchHistory(type) {
 
     if(type === 'invoice') {
         document.getElementById('history_invoiceBody').innerHTML = '<tr><td colspan="6" class="text-center p-4">Sedang memuat data...</td></tr>';
-        
         callAPI('getInvoices', {}).then(res => {
             if(res.status === 'success') {
                 historyInvoices = res.data.slice().reverse();
@@ -374,7 +394,7 @@ function fetchHistory(type) {
                             <button onclick="navigator.clipboard.writeText('${pubUrl}'); alert('Link disalin!')" class="text-xs bg-gray-200 border px-2 py-1 rounded hover:bg-gray-300">Copy Link</button>
                         </td>
                         <td class="p-2 text-center">
-                            <button onclick="previewHistoryInvoice(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat / Print PDF</button>
+                            <button onclick="previewHistoryInvoice(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat PDF</button>
                         </td>
                     </tr>`;
                 });
@@ -401,11 +421,10 @@ function previewHistoryInvoice(index) {
     buildInvoicePDF(inv, items, sender);
 }
 
+let activeDocName = "Dokumen";
 
-// --- PDF RENDERER (DIPERSIAPKAN UNTUK WINDOW.PRINT) ---
 function buildQuotePDF(qData, items, sender) {
-    // Ubah title dokumen agar saat disave as PDF namanya sesuai
-    document.title = `Quotation_${qData.QuoteID}`;
+    activeDocName = `Quotation_${qData.QuoteID}`;
     const html = `
         <div class="flex justify-between items-start mb-8 border-b-4 border-blue-800 pb-4">
             <div>
@@ -416,7 +435,7 @@ function buildQuotePDF(qData, items, sender) {
                 <h2 class="font-bold text-xl">${sender.name}</h2>
                 <p class="text-sm whitespace-pre-line">${sender.address}</p>
                 <p class="text-sm">Telp: ${sender.phone}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${qData.Date ? qData.Date.substring(0,10) : '-'}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${qData.Date.substring(0,10)}</p>
             </div>
         </div>
 
@@ -450,12 +469,12 @@ function buildQuotePDF(qData, items, sender) {
         </table>
         
         <div class="flex flex-col items-end mt-4">
-            <div class="bg-blue-800 text-white p-4 rounded min-w-[300px] mb-4 print:bg-blue-800 print:text-white print:-webkit-print-color-adjust: exact;">
+            <div class="bg-blue-800 text-white p-4 rounded min-w-[300px] mb-4">
                 <div class="flex justify-between font-bold text-xl"><span>GRAND TOTAL:</span> <span>Rp ${formatRupiah(qData.Total)}</span></div>
             </div>
         </div>
         
-        <div class="mt-4 text-xs text-gray-700 bg-gray-100 p-3 rounded print:bg-gray-100 print:-webkit-print-color-adjust: exact;">
+        <div class="mt-4 text-xs text-gray-700 bg-gray-100 p-3 rounded">
             <strong>Catatan Khusus:</strong><br>
             *Biaya jasa perseorangan, belum termasuk pajak. Bila dikenakan pajak, maka harga di atas merupakan angka bersih yang harus diterima penyedia jasa.
         </div>
@@ -470,8 +489,8 @@ function buildQuotePDF(qData, items, sender) {
 }
 
 function buildInvoicePDF(invData, items, sender) {
-    // Ubah title dokumen agar saat disave as PDF namanya sesuai
-    document.title = `Invoice_${invData.InvID}`;
+    activeDocName = `Invoice_${invData.InvID}`;
+    const pubUrl = window.location.origin + window.location.pathname + "?doc=" + invData.InvID;
     
     let taxHTML = '';
     if(parseInt(invData.TaxPPN) > 0) {
@@ -479,49 +498,37 @@ function buildInvoicePDF(invData, items, sender) {
     }
     
     if(parseInt(invData.TaxPPh) > 0) {
-        const sub = parseInt(invData.SubTotal);
-        const ppn = parseInt(invData.TaxPPN);
-        const pph = parseInt(invData.TaxPPh);
-        const tot = parseInt(invData.Total);
-
-        const isDipotong = (tot === (sub + ppn - pph));
-        const isDitanggung = (tot === (sub + ppn + pph));
-
-        let rateStr = "2%";
-        let impliedRate = 0;
-        if (isDipotong) impliedRate = (pph / sub) * 100;
-        if (isDitanggung) impliedRate = (pph / (sub + pph)) * 100;
-        
-        if (Math.abs(impliedRate - 2.5) < 0.1) rateStr = "2.5%";
+        const expectedDipotongTotal = parseInt(invData.SubTotal) + parseInt(invData.TaxPPN) - parseInt(invData.TaxPPh);
+        const isDipotong = (parseInt(invData.Total) === expectedDipotongTotal);
 
         if(isDipotong) {
-            taxHTML += `<div class="flex justify-between mb-2 text-red-600 border-b border-gray-300 pb-2"><span>Dipotong PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
-        } else if(isDitanggung) {
-            taxHTML += `<div class="flex justify-between mb-2 text-green-700 border-b border-gray-300 pb-2"><span>Ditambah PPh (${rateStr}) Gross Up:</span> <span>Rp ${formatRupiah(pph)}</span></div>`;
+            taxHTML += `<div class="flex justify-between mb-2 text-red-600 border-b border-gray-300 pb-2"><span>Dipotong PPh 23 (2%):</span> <span>(Rp ${formatRupiah(invData.TaxPPh)})</span></div>`;
         } else {
-            taxHTML += `<div class="flex justify-between mb-2 text-gray-600 border-b border-gray-300 pb-2"><span>Info PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
+            taxHTML += `<div class="flex justify-between mb-2 text-green-700 text-xs italic border-b border-gray-300 pb-2"><span>*Telah Ditanggung Pembeli (PPh 23 2%)</span> <span>(Rp ${formatRupiah(invData.TaxPPh)})</span></div>`;
         }
     }
-
-    const notesStr = (invData.Notes || '').trim();
-    const notesHTML = (notesStr !== '' && notesStr !== '-') ? `<p class="text-sm mt-3 whitespace-pre-line">Catatan:<br>${notesStr}</p>` : '';
 
     const html = `
         <div class="flex justify-between items-start mb-8 border-b-4 border-indigo-800 pb-4">
             <div>
                 <h1 class="text-4xl font-extrabold text-indigo-800 tracking-wider">INVOICE</h1>
                 <p class="text-gray-600 mt-2 text-lg font-bold">${invData.InvID}</p>
+                <div class="mt-2 text-xs bg-indigo-50 border p-2 rounded inline-block">
+                    <p class="font-bold">Link Akses E-Invoice Klien:</p>
+                    <p class="font-mono text-blue-600">${pubUrl}</p>
+                    <p class="mt-1">PIN AKSES: <span class="font-bold text-lg text-indigo-700 tracking-widest">${invData.ViewCode}</span></p>
+                </div>
             </div>
             <div class="text-right">
                 <h2 class="font-bold text-xl">${sender.name}</h2>
                 <p class="text-sm whitespace-pre-line">${sender.address}</p>
                 <p class="text-sm">Telp: ${sender.phone}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${invData.Date ? invData.Date.substring(0,10) : '-'}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${invData.Date.substring(0,10)}</p>
             </div>
         </div>
         
         <table class="w-full text-left mt-6 mb-6 border-collapse text-sm border border-gray-400">
-            <tr class="bg-indigo-100 text-indigo-900 print:bg-indigo-100 print:-webkit-print-color-adjust: exact;">
+            <tr class="bg-indigo-100 text-indigo-900">
                 <th class="p-2 border border-gray-400 font-bold text-center w-8">No</th>
                 <th class="p-2 border border-gray-400 font-bold">Deskripsi Penagihan</th>
                 <th class="p-2 border border-gray-400 font-bold text-center w-12">Qty</th>
@@ -549,38 +556,40 @@ function buildInvoicePDF(invData, items, sender) {
             </div>
         </div>
         
-        <div class="mt-12 border-2 border-gray-300 p-4 bg-gray-50 rounded print:bg-gray-50 print:-webkit-print-color-adjust: exact;">
+        <div class="mt-12 border-2 border-gray-300 p-4 bg-gray-50 rounded">
             <p class="font-bold text-gray-800 mb-2">Informasi Pembayaran:</p>
             <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID}</p>
-            ${notesHTML}
+            <p class="text-sm mt-3 whitespace-pre-line">Catatan: ${invData.Notes || '-'}</p>
         </div>
         
         <div class="mt-12 text-center text-sm text-gray-500">Terima kasih atas kepercayaan Anda bekerja sama dengan kami.</div>
     `;
-    
-    if(document.getElementById('publicViewArea') && !document.getElementById('publicViewArea').classList.contains('hidden')) {
-        // Tampilkan di area public
-        document.getElementById('pdfRenderArea').innerHTML = html;
-    } else {
-        // Tampilkan di modal Admin
-        openPDFModal(html);
-    }
+    openPDFModal(html);
 }
 
 function openPDFModal(htmlContent) {
-    document.getElementById('adminPdfRenderArea').innerHTML = htmlContent;
-    
-    // Assign juga ke pdfRenderArea (yang akan di-print oleh CSS @media print)
-    const renderDiv = document.getElementById('pdfRenderArea');
-    if(renderDiv) renderDiv.innerHTML = htmlContent;
-    
+    document.getElementById('pdfRenderArea').innerHTML = htmlContent;
     document.getElementById('pdfModal').classList.remove('hidden');
 }
 
 function closePDFModal() {
     document.getElementById('pdfModal').classList.add('hidden');
-    // Kembalikan nama dokumen ke default
-    document.title = "Sistem ERP & Invoicing";
+}
+
+function downloadPDF(elementId, fileName) {
+    const element = document.getElementById(elementId);
+    const opt = {
+        margin:       0,
+        filename:     fileName + '.pdf',
+        image:        { type: 'jpeg', quality: 1 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+}
+
+function downloadActivePDF() {
+    downloadPDF('pdfRenderArea', activeDocName);
 }
 
 function unlockPublicDoc() {
@@ -596,6 +605,8 @@ function unlockPublicDoc() {
             let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
             
             buildInvoicePDF(data, items, sender);
+            document.getElementById('renderedPublicDoc').innerHTML = document.getElementById('pdfRenderArea').innerHTML;
+            closePDFModal(); 
         } else {
             alert('PIN Salah atau Dokumen tidak ditemukan!');
         }
