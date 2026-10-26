@@ -533,7 +533,7 @@ function buildQuotePDF(qData, items, sender) {
             <p>Demikian penawaran harga ini disampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih.</p>
         </div>
         <div class="mt-12 pt-4 text-right text-sm text-gray-800">
-            <p class="mt-6 mb-16">Hormat Saya,</p>
+            <p class="mt-6 mb-16">Hormat Saya,         </p>
             <p class="font-bold border-t border-gray-400 inline-block px-8 pt-2">Fiky Alannuari</p>
         </div>
         
