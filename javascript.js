@@ -523,14 +523,20 @@ function buildQuotePDF(qData, items, sender) {
         
         <div class="mt-4 text-xs text-gray-700 bg-gray-100 p-3 rounded">
             <strong>Catatan Khusus:</strong><br>
-            *Biaya jasa perseorangan, belum termasuk pajak. Bila dikenakan pajak, maka harga di atas merupakan angka bersih yang harus diterima penyedia jasa.
+            - Harga sudah termasuk diskon promo dan biaya kirim<br>
+            - Penawaran berlaku selama 14 hari<br>
+            - Biaya jasa perseorangan, belum termasuk pajak. Bila dikenakan pajak, maka harga di atas merupakan angka bersih yang harus diterima penyedia jasa<br>
+            - Pembayaran minimal DP 70% dari total biaya pesanan (diluar pajak)
         </div>
         
         <div class="mt-12 pt-4 text-center text-sm text-gray-800">
             <p>Demikian penawaran harga ini disampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih.</p>
-            <p class="mt-6 mb-16">Hormat Kami,</p>
-            <p class="font-bold border-t border-gray-400 inline-block px-8 pt-2">Manajemen</p>
         </div>
+        <div class="mt-12 pt-4 align-right text-sm text-gray-800">
+            <p class="mt-6 mb-16">Hormat Saya,</p>
+            <p class="font-bold border-t border-gray-400 inline-block px-8 pt-2">Fiky Alannuari</p>
+        </div>
+        
     `;
     openPDFModal(html);
 }
