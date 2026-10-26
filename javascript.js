@@ -566,13 +566,13 @@ function buildInvoicePDF(invData, items, sender) {
         
         if (Math.abs(impliedRate - 2.5) < 0.1) rateStr = "2.5%";
 
-        if(isDipotong) {
-            taxHTML += `<div class="flex justify-between mb-2 text-red-600 border-b border-gray-300 pb-2"><span>Dipotong PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
-        } else if(isDitanggung) {
-            taxHTML += `<div class="flex justify-between mb-2 text-green-700 border-b border-gray-300 pb-2"><span>Ditambah PPh (${rateStr}) Gross Up:</span> <span>Rp ${formatRupiah(pph)}</span></div>`;
-        } else {
-            taxHTML += `<div class="flex justify-between mb-2 text-gray-600 border-b border-gray-300 pb-2"><span>Info PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
-        }
+        // if(isDipotong) {
+        //     taxHTML += `<div class="flex justify-between mb-2 text-red-600 border-b border-gray-300 pb-2"><span>Dipotong PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
+        // } else if(isDitanggung) {
+        //     taxHTML += `<div class="flex justify-between mb-2 text-green-700 border-b border-gray-300 pb-2"><span>Ditambah PPh (${rateStr}) Gross Up:</span> <span>Rp ${formatRupiah(pph)}</span></div>`;
+        // } else {
+        //     taxHTML += `<div class="flex justify-between mb-2 text-gray-600 border-b border-gray-300 pb-2"><span>Info PPh (${rateStr}):</span> <span>(Rp ${formatRupiah(pph)})</span></div>`;
+        // }
     }
 
     const uploadRec = historyUploads.find(u => u.RefID === invData.InvID);
@@ -635,7 +635,7 @@ function buildInvoicePDF(invData, items, sender) {
         
         <div class="mt-12 border-2 border-gray-300 p-4 bg-gray-50 rounded">
             <p class="font-bold text-gray-800 mb-2">Informasi Pembayaran:</p>
-            <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID}</p>
+            <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID} (Rp ${formatRupiah(Math.round(parseFloat(invData.Total * 0.3)))})</p>
             ${notesHTML}
             ${uploadHTML}
         </div>
