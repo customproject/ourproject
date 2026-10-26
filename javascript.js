@@ -526,7 +526,7 @@ function buildQuotePDF(qData, items, sender) {
             - Penawaran berlaku selama 14 hari.<br>
             - Harga perseorangan (belum termasuk PPh23).<br>
             - Pembayaran minimal DP 70% dari total biaya pesanan.<br>
-            Harap ditransfer ke <strong class="text-blue-900">BCA - 6470598008 - Fiky Alannuari</strong>
+            Harap ditransfer ke <strong class="text-blue-900">BCA - 6470598008 - Fiky Alannuari</strong> sebesar Rp Rp ${formatRupiah(qData.Total*70%)}
         </div>
         
         <div class="mt-6 pt-4 text-center text-sm text-gray-800">
