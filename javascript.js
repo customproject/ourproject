@@ -202,7 +202,7 @@ function generateQuotation() {
     let total = quoteItems.reduce((sum, itm) => sum + (itm.Total ? parseInt(itm.Total) : Math.round(parseFloat(itm.Price) * (itm.Qty || 1))), 0);
     
     const senderData = {
-        name: document.getElementById('q_sender_name').value || 'PT NAMA BISNIS ANDA',
+        name: document.getElementById('q_sender_name').value || 'Fiky Alannuari',
         phone: document.getElementById('q_sender_phone').value || '',
         address: document.getElementById('q_sender_address').value || ''
     };
@@ -255,10 +255,10 @@ function loadQuoteIntoInvoice() {
         let parsed = JSON.parse(quote.ItemsJSON || '[]');
         if (Array.isArray(parsed)) {
             invoiceItems = parsed;
-            activeSenderInfo = { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' };
+            activeSenderInfo = { name: 'Fiky Alannuari', phone: '0813-8792-6814', address: 'Cengkareng, Jakarta Barat 11730' };
         } else {
             invoiceItems = parsed.itemsList || [];
-            activeSenderInfo = parsed.senderInfo || { name: 'PT NAMA BISNIS ANDA', phone: '', address: '' };
+            activeSenderInfo = parsed.senderInfo || { name: 'Fiky Alannuari', phone: '', address: '' };
         }
         renderInvoiceTable();
     } else {
@@ -456,7 +456,7 @@ function previewHistoryQuote(index) {
     const q = historyQuotes[index];
     let parsed = JSON.parse(q.ItemsJSON || '[]');
     let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
-    let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
+    let sender = Array.isArray(parsed) ? { name: 'Fiky Alannuari', phone: '0813-8792-6814', address: 'Cengkareng, Jakarta Barat 11730' } : (parsed.senderInfo || {});
     buildQuotePDF(q, items, sender);
 }
 
@@ -464,7 +464,7 @@ function previewHistoryInvoice(index) {
     const inv = historyInvoices[index];
     let parsed = JSON.parse(inv.ItemsJSON || '[]');
     let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
-    let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
+    let sender = Array.isArray(parsed) ? { name: 'Fiky Alannuari', phone: '0813-8792-6814', address: 'Cengkareng, Jakarta Barat 11730' } : (parsed.senderInfo || {});
     buildInvoicePDF(inv, items, sender);
 }
 
@@ -487,7 +487,7 @@ function buildQuotePDF(qData, items, sender) {
         </div>
 
         <div class="mb-8">
-            <h3 class="font-bold text-gray-700 border-b mb-2">Penawaran Ditujukan Kepada:</h3>
+            <h3 class="font-bold text-gray-700 border-b mb-2">Ditujukan Kepada:</h3>
             <p class="font-bold text-xl">${qData.ToName}</p>
             <p class="text-sm">${qData.Phone || ''}</p>
             <p class="text-sm whitespace-pre-line max-w-sm">${qData.Address || ''}</p>
@@ -522,14 +522,14 @@ function buildQuotePDF(qData, items, sender) {
         </div>
         
         <div class="mt-4 text-xs text-gray-700 bg-gray-100 p-3 rounded">
-            <strong>Catatan Khusus:</strong><br>
-            - Harga sudah termasuk diskon promo dan biaya kirim<br>
-            - Penawaran berlaku selama 14 hari<br>
-            - Biaya jasa perseorangan (belum termasuk PPh23).<br>
-            - Pembayaran minimal DP 70% dari total biaya pesanan
+            - Harga sudah termasuk diskon promo dan biaya kirim.<br>
+            - Penawaran berlaku selama 14 hari.<br>
+            - Harga perseorangan (belum termasuk PPh23).<br>
+            - Pembayaran minimal DP 70% dari total biaya pesanan.<br>
+            Harap ditransfer ke <strong class="text-blue-900">BCA - 6470598008 - Fiky Alannuari</strong>
         </div>
         
-        <div class="mt-12 pt-4 text-center text-sm text-gray-800">
+        <div class="mt-6 pt-4 text-center text-sm text-gray-800">
             <p>Demikian penawaran harga ini disampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih.</p>
         </div>
         <div class="mt-12 pt-4 text-right text-sm text-gray-800">
@@ -682,7 +682,7 @@ function unlockPublicDoc() {
             const data = res.data;
             let parsed = JSON.parse(data.ItemsJSON);
             let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
-            let sender = Array.isArray(parsed) ? { name: 'PT NAMA BISNIS ANDA', phone: '0812-XXXX-XXXX', address: 'Jl. Pusat Bisnis No. 1, Jakarta 12345' } : (parsed.senderInfo || {});
+            let sender = Array.isArray(parsed) ? { name: 'Fiky Alannuari', phone: '0813-8792-6814', address: 'Cengkareng, Jakarta Barat 11730' } : (parsed.senderInfo || {});
             
             buildInvoicePDF(data, items, sender);
             document.getElementById('renderedPublicDoc').innerHTML = document.getElementById('pdfRenderArea').innerHTML;
