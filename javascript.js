@@ -635,7 +635,7 @@ function buildInvoicePDF(invData, items, sender) {
         
         <div class="mt-12 border-2 border-gray-300 p-4 bg-gray-50 rounded">
             <p class="font-bold text-gray-800 mb-2">Informasi Pembayaran:</p>
-            <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID} (Rp ${formatRupiah(Math.round(parseFloat(invData.Total * 0.3)))})</p>
+            <p class="font-mono text-xl text-indigo-700 font-bold">${invData.BankID} (Rp ${formatRupiah(Math.round(parseFloat(invData.Total - (invData.SubTotal * 0.7))))})</p>
             ${notesHTML}
             ${uploadHTML}
         </div>
