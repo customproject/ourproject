@@ -120,8 +120,9 @@ The generated documents include document identifiers, sender/client details, ite
 
 | File | Responsibility |
 | --- | --- |
+| `code.gs` | Google Apps Script API, authentication, session management, spreadsheet persistence, server-side calculations, uploads, and public invoice access. |
 | `index.html` | Application markup, screen structure, forms, tables, navigation, public PIN view, and PDF modal. |
-| `javascript.js` | Frontend state, UI interactions, calculations, API requests, document rendering, and PDF download behavior. |
+| `javascript.js` | Frontend state, UI interactions, client-side previews, API requests, safe document rendering, and PDF download behavior. |
 | `README.md` | Project overview, interface guide, workflows, and implementation notes. |
 
 The frontend uses:
@@ -132,14 +133,16 @@ The frontend uses:
 - **html2pdf.js via CDN** for A4 PDF generation
 - **Google Apps Script web app** as the configured API endpoint
 
-The Google Apps Script backend is external to this repository. Its implementation, data storage, credential verification, token lifecycle, and PIN validation are therefore not documented or verifiable from the frontend files alone.
+The Google Apps Script backend is included in `code.gs`. It uses Google Sheets for application records and Google Drive for uploaded evidence. Deploy this file as the web app backend and keep the spreadsheet and Drive folder access restricted to the appropriate administrators.
 
 ## Configuration and running
 
-1. Deploy the Google Apps Script backend as a web app and configure its access settings appropriately.
-2. Set the deployed endpoint in the `API_URL` constant near the top of `javascript.js`.
-3. Serve or host `index.html` with `javascript.js` available at the referenced path.
-4. Open the page in a modern browser.
+1. Back up the Google Sheets spreadsheet and upload folder before updating the backend.
+2. Open the bound Google Apps Script project and replace its backend source with the repository's `code.gs`.
+3. Confirm `UPLOAD_FOLDER_ID` in `code.gs` refers to the intended Google Drive folder. The spreadsheet ID is read from the active bound spreadsheet.
+4. Deploy a new version of the Apps Script web app and set its access permissions intentionally.
+5. Update `API_URL` in `javascript.js` when the deployment URL changes.
+6. Serve or host `index.html` with `javascript.js` available at the referenced path, then test login, item retrieval, quotation creation, invoice creation, upload, and public PIN access.
 
 The page loads Tailwind CSS and html2pdf.js from public CDNs, so those libraries need to be reachable by the browser. The frontend does not include a local build step or package manager configuration.
 
@@ -171,3 +174,13 @@ This repository contains the browser frontend. It does not contain the Apps Scri
 - File-upload validation and storage permissions
 
 Review the backend implementation and deployment settings before treating the application as production-ready.
+
+
+## Backend behavior and compatibility
+
+- The existing API actions remain available: `login`, `getItems`, `getBanks`, `getQuotations`, `getInvoices`, `getUploads`, `saveItem`, `saveQuotation`, `saveInvoice`, `uploadFile`, and `publicView`. The authenticated `logout` action has been added.
+- Quotation line items are validated and their prices are re-read from the Master Item sheet when an item ID is supplied. Invoice creation uses the saved quotation snapshot rather than trusting browser-submitted invoice items.
+- Invoice tax amounts and totals are calculated by the backend from `ppnEnabled` and `pphStatus`. The current calculation rates preserve the existing UI behavior (PPN 11%; PPh options 2% and 2.5%). Confirm tax treatment and rates with a qualified Indonesian tax professional before issuing real invoices.
+- ID generation and record appends use a script lock to reduce duplicate IDs during simultaneous writes.
+- If attachment upload fails after invoice creation, the frontend reports that the invoice was saved and that the attachment needs separate attention. It does not report the whole invoice transaction as failed.
+- The spreadsheet must retain the existing sheet names and header columns used by the application: `Admin`, `Sessions`, `Items`, `Banks`, `Quotations`, `Invoices`, and `Uploads`. Existing records are not intentionally rewritten by this revision, although the first successful login upgrades that administrator's password cell and the session sheet may gain new columns.
