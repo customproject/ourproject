@@ -15,7 +15,9 @@ const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
 const UPLOAD_FOLDER_ID = '1TFVFKV7K33cIPXPMxrVrGGJUmUMHiHWl';
 const APP_TIMEZONE = 'Asia/Jakarta';
 const SESSION_TTL_HOURS = 12;
-const PBKDF2_ITERATIONS = 600000;
+// Apps Script's per-call HMAC loop made 600,000 iterations exceed the web-app runtime.
+// Use the strongest iteration count that is practical for synchronous Apps Script login.
+const PBKDF2_ITERATIONS = 10000;
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ALLOWED_UPLOAD_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
 const SHARE_UPLOADS_WITH_LINK = true;
@@ -368,6 +370,66 @@ function handleLogin(data) {
     createSession_(token, username);
     return { token: token, expiresInHours: SESSION_TTL_HOURS };
   });
+}
+
+/**
+ * Run manually from the Apps Script editor while signed in as the spreadsheet owner.
+ * Creates or resets one administrator without requiring an existing login.
+ * The password is entered in a private prompt and only its salted hash is stored.
+ */
+function createOrResetAdminAccount() {
+  var ui = SpreadsheetApp.getUi();
+  var usernamePrompt = ui.prompt(
+    'Create / reset administrator',
+    'Enter the administrator username (for example: fiky):',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (usernamePrompt.getSelectedButton() !== ui.Button.OK) return;
+  var username = cleanText_(usernamePrompt.getResponseText(), 120);
+  if (!username) throw new Error('Username is required.');
+
+  var passwordPrompt = ui.prompt(
+    'Set administrator password',
+    'Enter a new password (at least 12 characters):',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (passwordPrompt.getSelectedButton() !== ui.Button.OK) return;
+  var password = String(passwordPrompt.getResponseText() || '');
+  if (password.length < 12 || password.length > 500) {
+    throw new Error('Password must contain 12 to 500 characters.');
+  }
+
+  var sheet = getSheet_('Admin');
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 2))
+    .getValues()[0].map(function(value) { return String(value || '').trim().toLowerCase(); });
+  var usernameIndex = headers.indexOf('username');
+  var passwordIndex = headers.indexOf('password');
+  if (usernameIndex < 0) usernameIndex = 0;
+  if (passwordIndex < 0) passwordIndex = 1;
+
+  var passwordHash = createPasswordHash_(password);
+  var result = withScriptLock_(function() {
+    var lastRow = sheet.getLastRow();
+    var rows = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, Math.max(sheet.getLastColumn(), 2)).getValues() : [];
+    for (var i = 0; i < rows.length; i++) {
+      if (constantTimeEquals_(String(rows[i][usernameIndex] || ''), username)) {
+        sheet.getRange(i + 2, usernameIndex + 1).setValue(username);
+        sheet.getRange(i + 2, passwordIndex + 1).setValue(passwordHash);
+        return 'reset';
+      }
+    }
+    var newRow = new Array(Math.max(sheet.getLastColumn(), usernameIndex + 1, passwordIndex + 1)).fill('');
+    newRow[usernameIndex] = username;
+    newRow[passwordIndex] = passwordHash;
+    sheet.appendRow(newRow);
+    return 'created';
+  });
+
+  ui.alert(
+    result === 'created' ? 'Administrator created' : 'Administrator password reset',
+    'The account "' + username + '" is ready. Sign in using this username and the password you just entered.',
+    ui.ButtonSet.OK
+  );
 }
 
 function ensureSessionColumns_(sheet) {
