@@ -120,8 +120,9 @@ The generated documents include document identifiers, sender/client details, ite
 
 | File | Responsibility |
 | --- | --- |
+| `code.gs` | Google Apps Script API, authentication, session management, spreadsheet persistence, server-side calculations, uploads, and public invoice access. |
 | `index.html` | Application markup, screen structure, forms, tables, navigation, public PIN view, and PDF modal. |
-| `javascript.js` | Frontend state, UI interactions, calculations, API requests, document rendering, and PDF download behavior. |
+| `javascript.js` | Frontend state, UI interactions, client-side previews, API requests, safe document rendering, and PDF download behavior. |
 | `README.md` | Project overview, interface guide, workflows, and implementation notes. |
 
 The frontend uses:
@@ -132,14 +133,16 @@ The frontend uses:
 - **html2pdf.js via CDN** for A4 PDF generation
 - **Google Apps Script web app** as the configured API endpoint
 
-The Google Apps Script backend is external to this repository. Its implementation, data storage, credential verification, token lifecycle, and PIN validation are therefore not documented or verifiable from the frontend files alone.
+The Google Apps Script backend is included in `code.gs`. It uses Google Sheets for application records and Google Drive for uploaded evidence. Deploy this file as the web app backend and keep the spreadsheet and Drive folder access restricted to the appropriate administrators.
 
 ## Configuration and running
 
-1. Deploy the Google Apps Script backend as a web app and configure its access settings appropriately.
-2. Set the deployed endpoint in the `API_URL` constant near the top of `javascript.js`.
-3. Serve or host `index.html` with `javascript.js` available at the referenced path.
-4. Open the page in a modern browser.
+1. Back up the Google Sheets spreadsheet and upload folder before updating the backend.
+2. Open the bound Google Apps Script project and replace its backend source with the repository's `code.gs`.
+3. Confirm `UPLOAD_FOLDER_ID` in `code.gs` refers to the intended Google Drive folder. The spreadsheet ID is read from the active bound spreadsheet.
+4. Deploy a new version of the Apps Script web app and set its access permissions intentionally.
+5. Update `API_URL` in `javascript.js` when the deployment URL changes.
+6. Serve or host `index.html` with `javascript.js` available at the referenced path, then test login, item retrieval, quotation creation, invoice creation, upload, and public PIN access.
 
 The page loads Tailwind CSS and html2pdf.js from public CDNs, so those libraries need to be reachable by the browser. The frontend does not include a local build step or package manager configuration.
 
@@ -147,27 +150,36 @@ The page loads Tailwind CSS and html2pdf.js from public CDNs, so those libraries
 
 The frontend sends JSON POST requests to the configured Apps Script endpoint. The shared `callAPI(action, data)` helper includes the locally stored admin token in requests. The visible frontend actions include login, master-item retrieval/saving, quotation creation and history, invoice creation and history, file upload, and public invoice retrieval.
 
-The exact request handlers and persistence behavior live in the external Apps Script project, not in this repository.
+The request handlers and persistence behavior are implemented in the repository's `code.gs` Google Apps Script backend.
 
 ## Authentication and security notes
 
-- The admin login sends the entered username and password to the backend and stores the returned token in `localStorage`.
-- Subsequent frontend API calls attach that token. The UI logs out when it receives an unauthorized response.
-- Logout removes the browser's stored token; this alone does **not** prove that the backend revokes the token.
+- The admin login sends the entered username and password to the backend. Legacy plaintext passwords are upgraded to salted PBKDF2-HMAC-SHA256 hashes (600,000 iterations) after successful verification.
+- New session tokens are stored as SHA-256 digests in the `Sessions` sheet, expire after 12 hours, and can be revoked by the authenticated `logout` action.
+- Subsequent frontend API calls attach the bearer token from `localStorage`; the UI logs out when it receives an unauthorized response.
 - A token's presence in `localStorage` only controls the initial frontend display. The backend must validate the token and authorize every protected operation.
 - JavaScript running on the same origin can read `localStorage`; an XSS vulnerability could expose a stored token. Consider a secure, HttpOnly, SameSite cookie-based session design if the backend architecture supports it.
-- Public invoice access uses a document ID and PIN. The backend should validate both on every public-document request and should apply appropriate rate limiting.
+- Public invoice access validates the document ID and 4–6 digit PIN on each request. Existing four-digit PINs remain valid; newly issued invoices use six digits. Failed attempts are throttled per invoice ID for a short window using Apps Script cache.
 - Do not commit real credentials, session tokens, private client data, or sensitive deployment configuration to the repository.
 
-## Current scope and limitations
+## Deployment checks and limitations
 
-This repository contains the browser frontend. It does not contain the Apps Script backend source, so the following cannot be confirmed from this codebase alone:
+The backend implementation is present in `code.gs`, but these environment-specific details still require verification against the live Google account and spreadsheet:
 
-- Password hashing and credential storage
-- Token generation, expiry, rotation, and server-side revocation
-- Server-side authorization for each admin action
-- PIN storage, verification, and brute-force protection
-- Data validation and persistence rules
-- File-upload validation and storage permissions
+- Apps Script execution time and service quotas, especially the PBKDF2 password migration/login step
+- Actual spreadsheet sheet names, header rows, and access permissions
+- Actual Drive folder permissions and whether Workspace policy permits link sharing
+- Correct deployment URL, web-app access settings, and browser-to-Apps-Script connectivity
+- Indonesian tax treatment and rates for the business's actual transactions
 
 Review the backend implementation and deployment settings before treating the application as production-ready.
+
+
+## Backend behavior and compatibility
+
+- The existing API actions remain available: `login`, `getItems`, `getBanks`, `getQuotations`, `getInvoices`, `getUploads`, `saveItem`, `saveQuotation`, `saveInvoice`, `uploadFile`, and `publicView`. The authenticated `logout` action has been added.
+- Quotation line items are validated and their prices are re-read from the Master Item sheet when an item ID is supplied. Invoice creation uses the saved quotation snapshot rather than trusting browser-submitted invoice items.
+- Invoice tax amounts and totals are calculated by the backend from `ppnEnabled` and `pphStatus`. The current calculation rates preserve the existing UI behavior (PPN 11%; PPh options 2% and 2.5%). Confirm tax treatment and rates with a qualified Indonesian tax professional before issuing real invoices.
+- ID generation and record appends use a script lock to reduce duplicate IDs during simultaneous writes.
+- If attachment upload fails after invoice creation, the frontend reports that the invoice was saved and that the attachment needs separate attention. It does not report the whole invoice transaction as failed.
+- The spreadsheet must retain the existing sheet names and header columns used by the application: `Admin`, `Sessions`, `Items`, `Banks`, `Quotations`, `Invoices`, and `Uploads`. Existing records are not intentionally rewritten by this revision, although the first successful login upgrades that administrator's password cell and the session sheet may gain new columns.

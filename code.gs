@@ -1,195 +1,816 @@
+/**
+ * ERP & Invoicing System - Google Apps Script API
+ *
+ * Compatibility notes:
+ * - Keeps the existing action names and core sheet columns.
+ * - Existing plain-text Admin passwords are upgraded to salted PBKDF2-SHA256
+ *   on the next successful login. Back up the spreadsheet before deployment.
+ * - Existing four-digit invoice PINs remain valid. New invoices receive six digits.
+ * - Upload sharing remains link-accessible to preserve the current client PDF
+ *   workflow. Set SHARE_UPLOADS_WITH_LINK=false if client attachment links
+ *   should no longer be public (the frontend link workflow must then change).
+ */
+
 const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
-const UPLOAD_FOLDER_ID = '1TFVFKV7K33cIPXPMxrVrGGJUmUMHiHWl'; // Pastikan ID Folder ini Valid
+const UPLOAD_FOLDER_ID = '1TFVFKV7K33cIPXPMxrVrGGJUmUMHiHWl';
+const APP_TIMEZONE = 'Asia/Jakarta';
+const SESSION_TTL_HOURS = 12;
+const PBKDF2_ITERATIONS = 600000;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const ALLOWED_UPLOAD_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const SHARE_UPLOADS_WITH_LINK = true;
+const PUBLIC_PIN_MAX_ATTEMPTS = 15;
+const PUBLIC_PIN_WINDOW_SECONDS = 600;
 
 function doPost(e) {
   try {
-    let payload = JSON.parse(e.postData.contents);
-    let action = payload.action;
-    let data = payload.data;
-    let token = payload.token;
-    let result = {};
+    if (!e || !e.postData || !e.postData.contents) {
+      throw new Error('Request body is required.');
+    }
 
-    // Celah Keamanan Ditutup: Validasi Token untuk aksi selain login & public view
-    if (action !== "login" && action !== "publicView") {
-      if (!validateToken(token)) {
-        throw new Error("Unauthorized. Sesi Anda tidak valid atau telah habis.");
+    var payload = JSON.parse(e.postData.contents);
+    if (!payload || typeof payload !== 'object') {
+      throw new Error('Invalid request payload.');
+    }
+
+    var action = cleanText_(payload.action, 60);
+    var data = payload.data && typeof payload.data === 'object' ? payload.data : {};
+    var token = cleanText_(payload.token, 300);
+    if (!action) throw new Error('Action is required.');
+
+    var result;
+    if (action === 'login') {
+      result = handleLogin(data);
+    } else if (action === 'publicView') {
+      result = getPublicDocument(data);
+    } else {
+      var username = getSessionUsername_(token);
+      if (!username) throw new Error('Unauthorized. Sesi Anda tidak valid atau telah habis.');
+
+      switch (action) {
+        case 'logout':
+          revokeSession_(token);
+          result = { loggedOut: true };
+          break;
+        case 'getItems':
+          result = getTableData('Items');
+          break;
+        case 'getBanks':
+          result = getTableData('Banks');
+          break;
+        case 'getQuotations':
+          result = getTableData('Quotations');
+          break;
+        case 'getInvoices':
+          result = getTableData('Invoices');
+          break;
+        case 'getUploads':
+          result = getTableData('Uploads');
+          break;
+        case 'saveItem':
+          result = saveMasterItem(data);
+          break;
+        case 'saveQuotation':
+          result = saveQuotation(data);
+          break;
+        case 'saveInvoice':
+          result = saveInvoice(data);
+          break;
+        case 'uploadFile':
+          result = uploadFileToDrive(data);
+          break;
+        default:
+          throw new Error('Unknown action: ' + action);
       }
     }
 
-    if (action === "login") result = handleLogin(data);
-    else if (action === "getItems") result = getTableData("Items");
-    else if (action === "getBanks") result = getTableData("Banks");
-    else if (action === "getQuotations") result = getTableData("Quotations");
-    else if (action === "getInvoices") result = getTableData("Invoices");
-    else if (action === "getUploads") result = getTableData("Uploads");
-    else if (action === "saveItem") result = saveMasterItem(data);
-    else if (action === "saveQuotation") result = saveQuotation(data);
-    else if (action === "saveInvoice") result = saveInvoice(data);
-    else if (action === "uploadFile") result = uploadFileToDrive(data);
-    else if (action === "publicView") result = getPublicDocument(data);
-
-    return ContentService.createTextOutput(JSON.stringify({ status: "success", data: result }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse_({ status: 'success', data: result });
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    console.error(error && error.stack ? error.stack : error);
+    return jsonResponse_({
+      status: 'error',
+      message: safeErrorMessage_(error)
+    });
   }
 }
 
-function doGet(e) {
-  return ContentService.createTextOutput("Backend API is Running Securely.").setMimeType(ContentService.MimeType.TEXT);
+function doGet() {
+  return ContentService.createTextOutput('ERP & Invoicing API is running.')
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
-function validateToken(token) {
-  if (!token) return false;
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Sessions");
-  if (!sheet) return false;
-  let rows = sheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === token) return true;
-  }
-  return false;
+function jsonResponse_(payload) {
+  return ContentService.createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
-function handleLogin(data) {
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Admin");
-  let rows = sheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] == data.username && rows[i][1] == data.password) {
-      let newToken = "AUTH_" + Utilities.getUuid();
-      // Simpan session agar tervalidasi di request selanjutnya
-      let sessionSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Sessions");
-      sessionSheet.appendRow([newToken, data.username, new Date()]);
-      return { token: newToken };
-    }
+function safeErrorMessage_(error) {
+  var message = error && error.message ? error.message : String(error || 'Unknown error');
+  return message.substring(0, 500);
+}
+
+function getSpreadsheet_() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
+function getSheet_(name) {
+  var sheet = getSpreadsheet_().getSheetByName(name);
+  if (!sheet) throw new Error('Required sheet not found: ' + name);
+  return sheet;
+}
+
+function withScriptLock_(callback) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    return callback();
+  } finally {
+    lock.releaseLock();
   }
-  throw new Error("Invalid Credentials");
+}
+
+function cleanText_(value, maxLength) {
+  if (value === null || value === undefined) return '';
+  var text = String(value).trim();
+  if (maxLength && text.length > maxLength) {
+    throw new Error('Text field exceeds the maximum length of ' + maxLength + ' characters.');
+  }
+  return text;
+}
+
+function parseMoney_(value, fieldName) {
+  var number = Number(value);
+  if (!isFinite(number) || number < 0 || number > 1000000000000) {
+    throw new Error('Invalid amount: ' + fieldName);
+  }
+  return Math.round(number);
+}
+
+function parseQuantity_(value) {
+  var number = Number(value);
+  if (!isFinite(number) || number <= 0 || number > 1000000) {
+    throw new Error('Quantity must be greater than zero.');
+  }
+  return number;
+}
+
+function parseDate_(value) {
+  var dateText = cleanText_(value, 10);
+  if (!dateText) return Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyyy-MM-dd');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+    throw new Error('Date must use YYYY-MM-DD format.');
+  }
+  var parsed = new Date(dateText + 'T00:00:00+07:00');
+  if (isNaN(parsed.getTime()) ||
+      Utilities.formatDate(parsed, APP_TIMEZONE, 'yyyy-MM-dd') !== dateText) {
+    throw new Error('Invalid date.');
+  }
+  return dateText;
+}
+
+function formatSheetValue_(value) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, APP_TIMEZONE, 'yyyy-MM-dd');
+  }
+  return value;
 }
 
 function getTableData(sheetName) {
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
-  let rows = sheet.getDataRange().getValues();
-  if (rows.length <= 1) return [];
-  
-  let headers = rows.shift(); 
-  return rows.map(row => {
-    let obj = {};
-    headers.forEach((header, index) => { 
-      let val = row[index];
-      // KUNCI FIX: Memaksa objek tanggal menjadi string teks di zona waktu Jakarta (GMT+7)
-      if (val instanceof Date) {
-        val = Utilities.formatDate(val, "GMT+7", "yyyy-MM-dd");
-      }
-      obj[header] = val; 
+  var sheet = getSheet_(sheetName);
+  var values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return [];
+
+  var headers = values[0].map(function(header) { return String(header).trim(); });
+  return values.slice(1).filter(function(row) {
+    return row.some(function(cell) { return cell !== '' && cell !== null; });
+  }).map(function(row) {
+    var record = {};
+    headers.forEach(function(header, index) {
+      if (header) record[header] = formatSheetValue_(row[index]);
     });
-    return obj;
+    return record;
   });
 }
 
-function generateID(sheetName, prefix) {
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(sheetName);
-  let lastRow = sheet.getLastRow();
-  
-  if (lastRow <= 1) return prefix + "-0001";
-  
-  // Perbaikan: Cari angka tertinggi secara dinamis (mencegah duplikat akibat sorting/hapus baris)
-  let ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  let maxNum = 0;
-  
-  for (let i = 0; i < ids.length; i++) {
-    let idStr = ids[i][0].toString();
-    if (idStr.startsWith(prefix)) {
-      let parts = idStr.split("-");
-      if (parts.length > 1) {
-        let num = parseInt(parts[1], 10);
-        if (!isNaN(num) && num > maxNum) maxNum = num;
-      }
+function headerMap_(sheet) {
+  var lastColumn = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  var map = {};
+  headers.forEach(function(header, index) {
+    var key = String(header || '').trim().toLowerCase();
+    if (key) map[key] = index;
+  });
+  return map;
+}
+
+function findHeaderIndex_(map, names, fallbackIndex) {
+  for (var i = 0; i < names.length; i++) {
+    var key = names[i].toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+  }
+  return fallbackIndex;
+}
+
+function findRecordById_(sheetName, id, idHeaders) {
+  var sheet = getSheet_(sheetName);
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return null;
+  var headers = values[0].map(function(value) { return String(value).trim(); });
+  var map = {};
+  headers.forEach(function(header, index) { map[header.toLowerCase()] = index; });
+  var idIndex = findHeaderIndex_(map, idHeaders || [], 0);
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][idIndex]) === String(id)) {
+      var record = {};
+      headers.forEach(function(header, index) {
+        record[header] = formatSheetValue_(values[i][index]);
+      });
+      record._row = i + 1;
+      return record;
     }
   }
-  
-  let nextNum = maxNum + 1;
-  return prefix + "-" + nextNum.toString().padStart(4, "0");
+  return null;
 }
+
+function appendMappedRow_(sheetName, record, fallbackValues) {
+  var sheet = getSheet_(sheetName);
+  var lastColumn = Math.max(sheet.getLastColumn(), fallbackValues ? fallbackValues.length : 1);
+  var headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+  var hasHeaders = headers.some(function(value) { return String(value || '').trim() !== ''; });
+
+  if (!hasHeaders && fallbackValues) {
+    sheet.appendRow(fallbackValues);
+    return;
+  }
+
+  var row = headers.map(function(header) {
+    var key = String(header || '').trim();
+    return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : '';
+  });
+  sheet.appendRow(row);
+}
+
+function generateID(sheetName, prefix) {
+  var sheet = getSheet_(sheetName);
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return prefix + '-0001';
+
+  var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  var maxNum = 0;
+  ids.forEach(function(row) {
+    var id = String(row[0] || '');
+    if (id.indexOf(prefix + '-') === 0) {
+      var match = id.match(/-(\d+)$/);
+      if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10) || 0);
+    }
+  });
+  return prefix + '-' + String(maxNum + 1).padStart(4, '0');
+}
+
+/* -------------------------- Authentication -------------------------- */
+
+function passwordHash_(password, salt, iterations) {
+  var passwordBytes = Utilities.newBlob(String(password), 'text/plain').getBytes();
+  var saltBytes = Utilities.newBlob(String(salt), 'text/plain').getBytes();
+  var block = saltBytes.concat([0, 0, 0, 1]);
+  var u = Utilities.computeHmacSha256Signature(block, passwordBytes);
+  var output = u.slice();
+
+  for (var i = 1; i < iterations; i++) {
+    u = Utilities.computeHmacSha256Signature(u, passwordBytes);
+    for (var j = 0; j < output.length; j++) {
+      output[j] = output[j] ^ u[j];
+    }
+  }
+  return Utilities.base64Encode(output);
+}
+
+function createPasswordHash_(password) {
+  var salt = Utilities.getUuid().replace(/-/g, '');
+  return 'pbkdf2_sha256$' + PBKDF2_ITERATIONS + '$' + salt + '$' +
+    passwordHash_(password, salt, PBKDF2_ITERATIONS);
+}
+
+function constantTimeEquals_(left, right) {
+  left = String(left || '');
+  right = String(right || '');
+  var difference = left.length ^ right.length;
+  var length = Math.max(left.length, right.length);
+  for (var i = 0; i < length; i++) {
+    difference |= (left.charCodeAt(i) || 0) ^ (right.charCodeAt(i) || 0);
+  }
+  return difference === 0;
+}
+
+function verifyPassword_(storedValue, suppliedPassword) {
+  var stored = String(storedValue || '');
+  if (stored.indexOf('pbkdf2_sha256$') === 0) {
+    var parts = stored.split('$');
+    if (parts.length !== 4) return { valid: false, migrate: false };
+    var iterations = parseInt(parts[1], 10);
+    if (!iterations || iterations < 10000 || iterations > 1000000) {
+      return { valid: false, migrate: false };
+    }
+    var actual = passwordHash_(suppliedPassword, parts[2], iterations);
+    return { valid: constantTimeEquals_(actual, parts[3]), migrate: false };
+  }
+
+  // Legacy plaintext password: allow one successful login, then upgrade it.
+  return { valid: constantTimeEquals_(stored, suppliedPassword), migrate: true };
+}
+
+function handleLogin(data) {
+  var username = cleanText_(data.username, 120);
+  var password = String(data.password || '');
+  if (!username || !password || password.length > 500) {
+    throw new Error('Username and password are required.');
+  }
+
+  // Perform the expensive password verification outside the script lock so
+  // logins do not block invoice/quotation writes while PBKDF2 is running.
+  var sheet = getSheet_('Admin');
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) throw new Error('No administrator account is configured.');
+
+  var headers = values[0].map(function(value) { return String(value).trim().toLowerCase(); });
+  var usernameIndex = headers.indexOf('username');
+  var passwordIndex = headers.indexOf('password');
+  if (usernameIndex < 0) usernameIndex = 0;
+  if (passwordIndex < 0) passwordIndex = 1;
+
+  var adminRow = -1;
+  var storedPassword = '';
+  for (var i = 1; i < values.length; i++) {
+    if (constantTimeEquals_(String(values[i][usernameIndex] || ''), username)) {
+      adminRow = i + 1;
+      storedPassword = String(values[i][passwordIndex] || '');
+      break;
+    }
+  }
+  if (adminRow < 0) throw new Error('Invalid credentials.');
+
+  var verification = verifyPassword_(storedPassword, password);
+  if (!verification.valid) throw new Error('Invalid credentials.');
+
+  // Recheck the credential under lock before migrating it. This prevents a
+  // concurrent password change from being overwritten by a stale login read.
+  var token = 'AUTH_' + Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
+  var upgradedPassword = verification.migrate ? createPasswordHash_(password) : null;
+  return withScriptLock_(function() {
+    var currentSheet = getSheet_('Admin');
+    var currentValue = String(currentSheet.getRange(adminRow, passwordIndex + 1).getValue() || '');
+    if (!constantTimeEquals_(currentValue, storedPassword)) {
+      throw new Error('Administrator credentials changed. Please try logging in again.');
+    }
+    if (verification.migrate) {
+      currentSheet.getRange(adminRow, passwordIndex + 1).setValue(upgradedPassword);
+    }
+    createSession_(token, username);
+    return { token: token, expiresInHours: SESSION_TTL_HOURS };
+  });
+}
+
+function ensureSessionColumns_(sheet) {
+  var map = headerMap_(sheet);
+  var required = ['ExpiresAt', 'RevokedAt', 'LastSeenAt'];
+  required.forEach(function(name) {
+    if (!Object.prototype.hasOwnProperty.call(map, name.toLowerCase())) {
+      var column = sheet.getLastColumn() + 1;
+      sheet.getRange(1, column).setValue(name);
+      map[name.toLowerCase()] = column - 1;
+    }
+  });
+  return map;
+}
+
+function tokenDigest_(token) {
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(token),
+    Utilities.Charset.UTF_8
+  );
+  return Utilities.base64Encode(bytes);
+}
+
+function createSession_(token, username) {
+  var sheet = getSheet_('Sessions');
+  var map = ensureSessionColumns_(sheet);
+  var lastColumn = sheet.getLastColumn();
+  var row = new Array(lastColumn).fill('');
+  var now = new Date();
+  row[findHeaderIndex_(map, ['token'], 0)] = tokenDigest_(token);
+  row[findHeaderIndex_(map, ['username'], 1)] = username;
+  row[findHeaderIndex_(map, ['createdat', 'created at'], 2)] = now;
+  row[findHeaderIndex_(map, ['expiresat'], 3)] =
+    new Date(now.getTime() + SESSION_TTL_HOURS * 60 * 60 * 1000);
+  row[findHeaderIndex_(map, ['revokedat'], 4)] = '';
+  row[findHeaderIndex_(map, ['lastseenat'], 5)] = now;
+  sheet.appendRow(row);
+}
+
+function getSessionUsername_(token) {
+  if (!token) return null;
+  var sheet = getSheet_('Sessions');
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return null;
+  var headers = values[0].map(function(value) { return String(value).trim().toLowerCase(); });
+  var tokenIndex = headers.indexOf('token');
+  var usernameIndex = headers.indexOf('username');
+  var createdIndex = headers.indexOf('createdat');
+  var expiresIndex = headers.indexOf('expiresat');
+  var revokedIndex = headers.indexOf('revokedat');
+  if (tokenIndex < 0) tokenIndex = 0;
+  if (usernameIndex < 0) usernameIndex = 1;
+  if (createdIndex < 0) createdIndex = 2;
+
+  var digest = tokenDigest_(token);
+  var now = new Date();
+  for (var i = values.length - 1; i >= 1; i--) {
+    var storedToken = String(values[i][tokenIndex] || '');
+    if (constantTimeEquals_(storedToken, digest) || constantTimeEquals_(storedToken, token)) {
+      if (revokedIndex >= 0 && values[i][revokedIndex]) return null;
+      var expires = expiresIndex >= 0 ? values[i][expiresIndex] : '';
+      if (expires instanceof Date) {
+        if (expires.getTime() < now.getTime()) return null;
+      } else if (!expires && values[i][createdIndex] instanceof Date) {
+        // Legacy sessions expire after the same fixed lifetime.
+        var legacyExpiry = values[i][createdIndex].getTime() + SESSION_TTL_HOURS * 60 * 60 * 1000;
+        if (legacyExpiry < now.getTime()) return null;
+      }
+      return String(values[i][usernameIndex] || '');
+    }
+  }
+  return null;
+}
+
+function validateToken(token) {
+  return !!getSessionUsername_(token);
+}
+
+function revokeSession_(token) {
+  if (!token) return;
+  var sheet = getSheet_('Sessions');
+  var map = headerMap_(sheet);
+  var tokenIndex = findHeaderIndex_(map, ['token'], 0);
+  var revokedIndex = findHeaderIndex_(map, ['revokedat'], -1);
+  if (revokedIndex < 0) {
+    revokedIndex = sheet.getLastColumn();
+    sheet.getRange(1, revokedIndex + 1).setValue('RevokedAt');
+    revokedIndex = revokedIndex;
+  }
+  var digest = tokenDigest_(token);
+  var values = sheet.getDataRange().getValues();
+  for (var i = values.length - 1; i >= 1; i--) {
+    var storedToken = String(values[i][tokenIndex] || '');
+    if (constantTimeEquals_(storedToken, digest) || constantTimeEquals_(storedToken, token)) {
+      sheet.getRange(i + 1, revokedIndex + 1).setValue(new Date());
+      return;
+    }
+  }
+}
+
+/* ---------------------------- Master items --------------------------- */
 
 function saveMasterItem(data) {
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Items");
-  let newId = generateID("Items", "ITM");
-  sheet.appendRow([newId, data.mainCat, data.subCat, data.name, data.price]);
-  return { id: newId };
+  var name = cleanText_(data.name, 200);
+  var mainCat = cleanText_(data.mainCat, 100);
+  var subCat = cleanText_(data.subCat, 100);
+  var price = parseMoney_(data.price, 'price');
+  if (!name) throw new Error('Item name is required.');
+
+  return withScriptLock_(function() {
+    var id = generateID('Items', 'ITM');
+    appendMappedRow_('Items', {
+      ItemID: id, MainCat: mainCat, SubCat: subCat, Name: name, Price: price
+    }, [id, mainCat, subCat, name, price]);
+    return { id: id };
+  });
 }
 
+function getMasterItemMap_() {
+  var items = getTableData('Items');
+  var map = {};
+  items.forEach(function(item) {
+    map[String(item.ItemID)] = item;
+  });
+  return map;
+}
+
+function normalizeSnapshotItems_(rawItems, requireMasterItem) {
+  if (!Array.isArray(rawItems) || rawItems.length === 0 || rawItems.length > 100) {
+    throw new Error('A document must contain between 1 and 100 line items.');
+  }
+  var masterMap = requireMasterItem ? getMasterItemMap_() : {};
+  var normalized = [];
+  rawItems.forEach(function(item) {
+    if (!item || typeof item !== 'object') throw new Error('Invalid line item.');
+    var itemId = cleanText_(item.ItemID || item.itemId || '', 100);
+    if (requireMasterItem && !itemId) throw new Error('Each quotation line must reference a saved Master Item.');
+    var master = itemId ? masterMap[itemId] : null;
+    if (requireMasterItem && itemId && !master) {
+      throw new Error('A selected master item no longer exists: ' + itemId);
+    }
+    var name = cleanText_(master ? master.Name : item.Name || item.name, 200);
+    var price = parseMoney_(master ? master.Price : item.Price !== undefined ? item.Price : item.price, 'item price');
+    var qty = parseQuantity_(item.Qty !== undefined ? item.Qty : item.qty);
+    if (!name) throw new Error('Every line item must have a name.');
+    normalized.push({
+      ItemID: itemId,
+      MainCat: cleanText_(master ? master.MainCat : item.MainCat || '', 100),
+      SubCat: cleanText_(master ? master.SubCat : item.SubCat || '', 100),
+      Name: name,
+      Price: price,
+      Qty: qty,
+      Keterangan: cleanText_(item.Keterangan || item.keterangan || '', 500),
+      Total: Math.round(price * qty)
+    });
+  });
+  return normalized;
+}
+
+function unpackItems_(itemsPayload) {
+  if (Array.isArray(itemsPayload)) return itemsPayload;
+  if (itemsPayload && Array.isArray(itemsPayload.itemsList)) return itemsPayload.itemsList;
+  throw new Error('Invalid document items.');
+}
+
+function serializeDocumentItems_(items, senderInfo) {
+  return JSON.stringify({
+    itemsList: items,
+    senderInfo: {
+      name: cleanText_(senderInfo && senderInfo.name || '', 200),
+      phone: cleanText_(senderInfo && senderInfo.phone || '', 60),
+      address: cleanText_(senderInfo && senderInfo.address || '', 500)
+    }
+  });
+}
+
+/* ----------------------------- Quotations ---------------------------- */
+
 function saveQuotation(data) {
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Quotations");
-  let newId = generateID("Quotations", "QT" + Utilities.formatDate(new Date(), "GMT+7", "yyMM"));
-  let date = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
-  
-  // FIX: Tambahkan "'" + date agar Sheets menyimpannya sebagai Plain Text
-  sheet.appendRow([newId, "'" + date, data.toName, data.phone, data.address, data.desc, JSON.stringify(data.items), data.total, "Pending"]);
-  return { id: newId };
+  var toName = cleanText_(data.toName, 200);
+  if (!toName) throw new Error('Client name is required.');
+  var items = normalizeSnapshotItems_(unpackItems_(data.items), true);
+  var total = items.reduce(function(sum, item) { return sum + item.Total; }, 0);
+  var sender = data.items && data.items.senderInfo ? data.items.senderInfo : {};
+  var itemsJson = serializeDocumentItems_(items, sender);
+  var now = new Date();
+  var date = Utilities.formatDate(now, APP_TIMEZONE, 'yyyy-MM-dd');
+
+  return withScriptLock_(function() {
+    var id = generateID('Quotations', 'QT' + Utilities.formatDate(now, APP_TIMEZONE, 'yyMM'));
+    appendMappedRow_('Quotations', {
+      QuoteID: id,
+      Date: "'" + date,
+      ToName: toName,
+      Phone: cleanText_(data.phone, 60),
+      Address: cleanText_(data.address, 500),
+      Description: cleanText_(data.desc, 1000),
+      ItemsJSON: itemsJson,
+      Total: total,
+      Status: 'Pending'
+    }, [id, "'" + date, toName, cleanText_(data.phone, 60),
+      cleanText_(data.address, 500), cleanText_(data.desc, 1000), itemsJson, total, 'Pending']);
+    return { id: id, total: total };
+  });
+}
+
+/* ------------------------------ Invoices ----------------------------- */
+
+function calculateTaxes_(subtotal, ppnEnabled, pphStatus) {
+  var ppn = ppnEnabled ? Math.round(subtotal * 0.11) : 0;
+  var pph = 0;
+  var total = subtotal + ppn;
+
+  switch (pphStatus) {
+    case 'dipotong_2':
+      pph = Math.round(subtotal * 0.02);
+      total -= pph;
+      break;
+    case 'ditanggung_2':
+      pph = Math.round(subtotal / 0.98 - subtotal);
+      total += pph;
+      break;
+    case 'dipotong_25':
+      pph = Math.round(subtotal * 0.025);
+      total -= pph;
+      break;
+    case 'ditanggung_25':
+      pph = Math.round(subtotal / 0.975 - subtotal);
+      total += pph;
+      break;
+    case 'none':
+    case '':
+    case null:
+    case undefined:
+      break;
+    default:
+      throw new Error('Unsupported PPh option.');
+  }
+  return { ppn: ppn, pph: pph, total: Math.round(total), pphStatus: pphStatus || 'none' };
+}
+
+function parseStoredItems_(itemsJson) {
+  var parsed;
+  try {
+    parsed = typeof itemsJson === 'string' ? JSON.parse(itemsJson || '[]') : itemsJson;
+  } catch (error) {
+    throw new Error('Stored quotation items are invalid. Please contact the administrator.');
+  }
+  return {
+    items: normalizeSnapshotItems_(unpackItems_(parsed), false),
+    sender: parsed && !Array.isArray(parsed) ? (parsed.senderInfo || {}) : {}
+  };
+}
+
+function generatePin_() {
+  var raw = Utilities.getUuid() + Utilities.getUuid();
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, raw, Utilities.Charset.UTF_8);
+  var hex = digest.map(function(byte) {
+    var value = (byte + 256) % 256;
+    return ('0' + value.toString(16)).slice(-2);
+  }).join('');
+  return String(100000 + (parseInt(hex.substring(0, 8), 16) % 900000));
+}
+
+function inferLegacyPphStatus_(subtotal, suppliedPphAmount) {
+  var amount = parseMoney_(suppliedPphAmount || 0, 'PPh amount');
+  if (amount === 0) return 'none';
+  var candidates = ['dipotong_2', 'ditanggung_2', 'dipotong_25', 'ditanggung_25'];
+  for (var i = 0; i < candidates.length; i++) {
+    if (calculateTaxes_(subtotal, false, candidates[i]).pph === amount) return candidates[i];
+  }
+  throw new Error('PPh selection is missing or inconsistent. Refresh the application and try again.');
 }
 
 function saveInvoice(data) {
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Invoices");
-  let newId = generateID("Invoices", "INV" + Utilities.formatDate(new Date(), "GMT+7", "yyMM"));
-  
-  // Ambil dari frontend, atau gunakan hari ini
-  let date = data.date ? data.date : Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
-  let viewCode = Math.floor(1000 + Math.random() * 9000).toString(); 
-  
-  // FIX: Tambahkan "'" + date agar Sheets menyimpannya sebagai Plain Text
-  sheet.appendRow([newId, data.quoteId, "'" + date, JSON.stringify(data.items), data.subTotal, data.taxPPN, data.taxPPh, data.total, data.bankId, data.notes, viewCode]);
-  return { id: newId, pin: viewCode };
+  var quoteId = cleanText_(data.quoteId, 100);
+  var bankId = cleanText_(data.bankId, 250);
+  if (!quoteId) throw new Error('Quotation reference is required.');
+  if (!bankId) throw new Error('Payment account is required.');
+  var date = parseDate_(data.date);
+  var ppnProvided = Object.prototype.hasOwnProperty.call(data, 'ppnEnabled');
+  var ppnEnabled = ppnProvided
+    ? (data.ppnEnabled === true || String(data.ppnEnabled) === 'true')
+    : (parseMoney_(data.taxPPN || 0, 'PPN amount') > 0);
+  var pphStatus = cleanText_(data.pphStatus || 'none', 30);
+
+  return withScriptLock_(function() {
+    var quotation = findRecordById_('Quotations', quoteId, ['quoteid']);
+    if (!quotation) throw new Error('Referenced quotation was not found.');
+
+    var snapshot = parseStoredItems_(quotation.ItemsJSON);
+    var items = snapshot.items;
+    var subtotal = items.reduce(function(sum, item) { return sum + item.Total; }, 0);
+    var effectivePphStatus = Object.prototype.hasOwnProperty.call(data, 'pphStatus')
+      ? pphStatus
+      : inferLegacyPphStatus_(subtotal, data.taxPPh);
+    var taxes = calculateTaxes_(subtotal, ppnEnabled, effectivePphStatus);
+    var id = generateID('Invoices', 'INV' + Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyMM'));
+    var pin = generatePin_();
+    var itemsJson = serializeDocumentItems_(items, snapshot.sender);
+
+    appendMappedRow_('Invoices', {
+      InvID: id,
+      QuoteID: quoteId,
+      Date: "'" + date,
+      ItemsJSON: itemsJson,
+      SubTotal: subtotal,
+      TaxPPN: taxes.ppn,
+      TaxPPh: taxes.pph,
+      Total: taxes.total,
+      BankID: bankId,
+      Notes: cleanText_(data.notes, 2000),
+      ViewCode: pin,
+      Status: 'Issued'
+    }, [id, quoteId, "'" + date, itemsJson, subtotal, taxes.ppn, taxes.pph,
+      taxes.total, bankId, cleanText_(data.notes, 2000), pin]);
+
+    return {
+      id: id,
+      pin: pin,
+      subTotal: subtotal,
+      taxPPN: taxes.ppn,
+      taxPPh: taxes.pph,
+      total: taxes.total
+    };
+  });
+}
+
+/* ------------------------------- Uploads ----------------------------- */
+
+function validateUpload_(data) {
+  var mimeType = cleanText_(data.mimeType, 100).toLowerCase();
+  if (ALLOWED_UPLOAD_TYPES.indexOf(mimeType) < 0) {
+    throw new Error('Only PDF, JPEG, and PNG files are allowed.');
+  }
+  var filename = cleanText_(data.filename, 180).replace(/[\\\/:*?"<>|#%]/g, '_');
+  if (!filename) throw new Error('Filename is required.');
+  var base64 = String(data.base64 || '');
+  if (!base64 || base64.length > Math.ceil(MAX_UPLOAD_BYTES * 4 / 3) + 16) {
+    throw new Error('File is empty or exceeds the 5 MB upload limit.');
+  }
+  var bytes;
+  try {
+    bytes = Utilities.base64Decode(base64);
+  } catch (error) {
+    throw new Error('Invalid file encoding.');
+  }
+  if (!bytes.length || bytes.length > MAX_UPLOAD_BYTES) {
+    throw new Error('File is empty or exceeds the 5 MB upload limit.');
+  }
+
+  var signature = bytes.slice(0, 8).map(function(value) { return (value + 256) % 256; });
+  var validSignature = false;
+  if (mimeType === 'application/pdf') {
+    validSignature = signature[0] === 37 && signature[1] === 80 &&
+      signature[2] === 68 && signature[3] === 70;
+  } else if (mimeType === 'image/png') {
+    validSignature = signature[0] === 137 && signature[1] === 80 &&
+      signature[2] === 78 && signature[3] === 71;
+  } else if (mimeType === 'image/jpeg') {
+    validSignature = signature[0] === 255 && signature[1] === 216 && signature[2] === 255;
+  }
+  if (!validSignature) throw new Error('File contents do not match the selected file type.');
+
+  return { filename: filename, mimeType: mimeType, bytes: bytes };
 }
 
 function uploadFileToDrive(data) {
-  let folder = DriveApp.getFolderById(UPLOAD_FOLDER_ID);
-  let blob = Utilities.newBlob(Utilities.base64Decode(data.base64), data.mimeType, data.filename);
-  let file = folder.createFile(blob);
-  
-  // Try-catch jika organisasi Google Workspace melarang public sharing
-  try {
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  } catch(e) {
-    Logger.log("Info: Organisasi melarang public share. File tetap terupload privat.");
+  var invoiceId = cleanText_(data.refId, 100);
+  if (!invoiceId || !findRecordById_('Invoices', invoiceId, ['invid'])) {
+    throw new Error('A valid invoice reference is required for an upload.');
   }
-  
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Uploads");
-  let newId = generateID("Uploads", "UPL");
-  sheet.appendRow([newId, data.refId, file.getUrl(), new Date()]);
-  return { fileUrl: file.getUrl() };
+  var upload = validateUpload_(data);
+  var folder = DriveApp.getFolderById(UPLOAD_FOLDER_ID);
+  var file = null;
+
+  try {
+    file = folder.createFile(Utilities.newBlob(upload.bytes, upload.mimeType, upload.filename));
+    if (SHARE_UPLOADS_WITH_LINK) {
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (sharingError) {
+        // Some Workspace policies block public link sharing; preserve the upload
+        // but log that the client may not be able to open its attachment link.
+        console.warn('Drive link sharing was blocked: ' + sharingError);
+      }
+    }
+
+    return withScriptLock_(function() {
+      var id = generateID('Uploads', 'UPL');
+      appendMappedRow_('Uploads', {
+        UploadID: id,
+        RefID: invoiceId,
+        FileURL: file.getUrl(),
+        CreatedAt: new Date()
+      }, [id, invoiceId, file.getUrl(), new Date()]);
+      return { id: id, fileUrl: file.getUrl() };
+    });
+  } catch (error) {
+    if (file) {
+      try { file.setTrashed(true); } catch (cleanupError) {
+        console.error('Unable to clean up orphan upload: ' + cleanupError);
+      }
+    }
+    throw error;
+  }
+}
+
+/* --------------------------- Public invoices ------------------------- */
+
+function checkPublicPinRateLimit_(docId) {
+  var cache = CacheService.getScriptCache();
+  var key = 'public-pin-' + tokenDigest_(docId).replace(/[^a-zA-Z0-9]/g, '').substring(0, 32);
+  var attempts = parseInt(cache.get(key) || '0', 10);
+  if (attempts >= PUBLIC_PIN_MAX_ATTEMPTS) {
+    throw new Error('Too many PIN attempts. Please try again in 10 minutes.');
+  }
+  return { cache: cache, key: key, attempts: attempts };
 }
 
 function getPublicDocument(data) {
-  let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Invoices");
-  let rows = sheet.getDataRange().getValues();
-  let headers = rows.shift();
-  
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i][0] === data.docId) { 
-      if (rows[i][10] == data.pin) { 
-        let obj = {};
-        headers.forEach((header, index) => { 
-          let val = rows[i][index];
-          // KUNCI FIX: Mencegah Timezone Shift di halaman klien
-          if (val instanceof Date) {
-            val = Utilities.formatDate(val, "GMT+7", "yyyy-MM-dd");
-          }
-          obj[header] = val; 
-        });
+  var docId = cleanText_(data.docId, 100);
+  var pin = cleanText_(data.pin, 8);
+  if (!docId || !/^\d{4,6}$/.test(pin)) {
+    throw new Error('Invoice ID or PIN is invalid.');
+  }
 
-        let upSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Uploads");
-        let upRows = upSheet.getDataRange().getValues();
-        for(let j=1; j<upRows.length; j++) {
-            if(upRows[j][1] === data.docId) {
-                obj.UploadedFileURL = upRows[j][2];
-                break;
-            }
-        }
-        return obj;
-      } else {
-        throw new Error("PIN Salah!");
-      }
+  var rate = checkPublicPinRateLimit_(docId);
+  var invoice = findRecordById_('Invoices', docId, ['invid']);
+  if (!invoice || !constantTimeEquals_(String(invoice.ViewCode || ''), pin)) {
+    rate.cache.put(rate.key, String(rate.attempts + 1), PUBLIC_PIN_WINDOW_SECONDS);
+    throw new Error('PIN salah atau dokumen tidak ditemukan.');
+  }
+  rate.cache.remove(rate.key);
+
+  var uploads = getTableData('Uploads');
+  for (var i = uploads.length - 1; i >= 0; i--) {
+    if (String(uploads[i].RefID) === docId) {
+      invoice.UploadedFileURL = uploads[i].FileURL;
+      break;
     }
   }
-  throw new Error("Dokumen tidak ditemukan.");
+  delete invoice._row;
+  return invoice;
 }
