@@ -488,6 +488,7 @@ function normalizeSnapshotItems_(rawItems, requireMasterItem) {
   rawItems.forEach(function(item) {
     if (!item || typeof item !== 'object') throw new Error('Invalid line item.');
     var itemId = cleanText_(item.ItemID || item.itemId || '', 100);
+    if (requireMasterItem && !itemId) throw new Error('Each quotation line must reference a saved Master Item.');
     var master = itemId ? masterMap[itemId] : null;
     if (requireMasterItem && itemId && !master) {
       throw new Error('A selected master item no longer exists: ' + itemId);
@@ -714,7 +715,13 @@ function uploadFileToDrive(data) {
   try {
     file = folder.createFile(Utilities.newBlob(upload.bytes, upload.mimeType, upload.filename));
     if (SHARE_UPLOADS_WITH_LINK) {
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (sharingError) {
+        // Some Workspace policies block public link sharing; preserve the upload
+        // but log that the client may not be able to open its attachment link.
+        console.warn('Drive link sharing was blocked: ' + sharingError);
+      }
     }
 
     return withScriptLock_(function() {
