@@ -150,28 +150,27 @@ The page loads Tailwind CSS and html2pdf.js from public CDNs, so those libraries
 
 The frontend sends JSON POST requests to the configured Apps Script endpoint. The shared `callAPI(action, data)` helper includes the locally stored admin token in requests. The visible frontend actions include login, master-item retrieval/saving, quotation creation and history, invoice creation and history, file upload, and public invoice retrieval.
 
-The exact request handlers and persistence behavior live in the external Apps Script project, not in this repository.
+The request handlers and persistence behavior are implemented in the repository's `code.gs` Google Apps Script backend.
 
 ## Authentication and security notes
 
-- The admin login sends the entered username and password to the backend and stores the returned token in `localStorage`.
-- Subsequent frontend API calls attach that token. The UI logs out when it receives an unauthorized response.
-- Logout removes the browser's stored token; this alone does **not** prove that the backend revokes the token.
+- The admin login sends the entered username and password to the backend. Legacy plaintext passwords are upgraded to salted PBKDF2-HMAC-SHA256 hashes (600,000 iterations) after successful verification.
+- New session tokens are stored as SHA-256 digests in the `Sessions` sheet, expire after 12 hours, and can be revoked by the authenticated `logout` action.
+- Subsequent frontend API calls attach the bearer token from `localStorage`; the UI logs out when it receives an unauthorized response.
 - A token's presence in `localStorage` only controls the initial frontend display. The backend must validate the token and authorize every protected operation.
 - JavaScript running on the same origin can read `localStorage`; an XSS vulnerability could expose a stored token. Consider a secure, HttpOnly, SameSite cookie-based session design if the backend architecture supports it.
-- Public invoice access uses a document ID and PIN. The backend should validate both on every public-document request and should apply appropriate rate limiting.
+- Public invoice access validates the document ID and 4–6 digit PIN on each request. Existing four-digit PINs remain valid; newly issued invoices use six digits. Failed attempts are throttled per invoice ID for a short window using Apps Script cache.
 - Do not commit real credentials, session tokens, private client data, or sensitive deployment configuration to the repository.
 
-## Current scope and limitations
+## Deployment checks and limitations
 
-This repository contains the browser frontend. It does not contain the Apps Script backend source, so the following cannot be confirmed from this codebase alone:
+The backend implementation is present in `code.gs`, but these environment-specific details still require verification against the live Google account and spreadsheet:
 
-- Password hashing and credential storage
-- Token generation, expiry, rotation, and server-side revocation
-- Server-side authorization for each admin action
-- PIN storage, verification, and brute-force protection
-- Data validation and persistence rules
-- File-upload validation and storage permissions
+- Apps Script execution time and service quotas, especially the PBKDF2 password migration/login step
+- Actual spreadsheet sheet names, header rows, and access permissions
+- Actual Drive folder permissions and whether Workspace policy permits link sharing
+- Correct deployment URL, web-app access settings, and browser-to-Apps-Script connectivity
+- Indonesian tax treatment and rates for the business's actual transactions
 
 Review the backend implementation and deployment settings before treating the application as production-ready.
 
