@@ -227,7 +227,7 @@ function renderQuoteTable() {
         tbody.innerHTML += `<tr>
             <td class="p-2 border-b text-center">${index + 1}</td>
             <td class="p-2 border-b">${escapeHtml(itm.Name)}</td>
-            <td class="p-2 border-b text-center">${itm.Qty || 1}</td>
+            <td class="p-2 border-b text-center">${escapeHtml(itm.Qty || 1)}</td>
             <td class="p-2 border-b text-right font-mono">Rp ${formatRupiah(itm.Price)}</td>
             <td class="p-2 border-b text-right font-mono text-blue-700 font-bold">Rp ${formatRupiah(itemTotal)}</td>
             <td class="p-2 border-b text-xs">${escapeHtml(itm.Keterangan || '-')}</td>
@@ -325,7 +325,7 @@ function renderInvoiceTable() {
         tbody.innerHTML += `<tr>
             <td class="p-2 border-b text-center">${index + 1}</td>
             <td class="p-2 border-b text-sm">${escapeHtml(itm.Name)}</td>
-            <td class="p-2 border-b text-center">${itm.Qty || 1}</td>
+            <td class="p-2 border-b text-center">${escapeHtml(itm.Qty || 1)}</td>
             <td class="p-2 border-b text-right font-mono">Rp ${formatRupiah(itm.Price)}</td>
             <td class="p-2 border-b text-right font-mono font-bold text-indigo-700">Rp ${formatRupiah(itemTotal)}</td>
             <td class="p-2 border-b text-xs">${escapeHtml(itm.Keterangan || '-')}</td>
@@ -461,7 +461,7 @@ function fetchHistory(type) {
                         <td class="p-2 font-bold">${escapeHtml(q.QuoteID)}</td>
                         <td class="p-2 text-sm">${escapeHtml(q.ToName)}</td>
                         <td class="p-2 text-xs truncate max-w-xs">${escapeHtml(q.Description || '-')}</td>
-                        <td class="p-2 text-sm">${formatTgl(q.Date)}</td>
+                        <td class="p-2 text-sm">${escapeHtml(formatTgl(q.Date))}</td>
                         <td class="p-2 text-right font-bold text-blue-700 font-mono">Rp ${formatRupiah(q.Total)}</td>
                         <td class="p-2 text-center">
                             <button onclick="previewHistoryQuote(${idx})" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-black">Lihat PDF</button>
@@ -540,7 +540,7 @@ function buildQuotePDF(qData, items, sender) {
                 <h2 class="font-bold text-xl">${escapeHtml(sender.name)}</h2>
                 <p class="text-sm whitespace-pre-line">${escapeHtml(sender.address)}</p>
                 <p class="text-sm">Telp: ${escapeHtml(sender.phone)}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${formatTgl(qData.Date)}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${escapeHtml(formatTgl(qData.Date))}</p>
             </div>
         </div>
 
@@ -565,7 +565,7 @@ function buildQuotePDF(qData, items, sender) {
             <tr>
                 <td class="p-2 border border-gray-400 text-center">${idx + 1}</td>
                 <td class="p-2 border border-gray-400">${escapeHtml(i.Name)}</td>
-                <td class="p-2 border border-gray-400 text-center">${i.Qty || 1}</td>
+                <td class="p-2 border border-gray-400 text-center">${escapeHtml(i.Qty || 1)}</td>
                 <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Price)}</td>
                 <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || Math.round(parseFloat(i.Price)*(i.Qty||1)))}</td>
                 <td class="p-2 border border-gray-400 text-xs">${escapeHtml(i.Keterangan || '')}</td>
@@ -658,7 +658,7 @@ function buildInvoicePDF(invData, items, sender) {
                 <h2 class="font-bold text-xl">${escapeHtml(sender.name)}</h2>
                 <p class="text-sm whitespace-pre-line">${escapeHtml(sender.address)}</p>
                 <p class="text-sm">Telp: ${escapeHtml(sender.phone)}</p>
-                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${formatTgl(invData.Date)}</p>
+                <p class="text-sm mt-4 text-gray-600">Tgl Terbit: ${escapeHtml(formatTgl(invData.Date))}</p>
             </div>
         </div>
         
