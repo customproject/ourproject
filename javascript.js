@@ -675,7 +675,7 @@ function buildInvoicePDF(invData, items, sender) {
             <tr>
                 <td class="p-2 border border-gray-400 text-center">${idx + 1}</td>
                 <td class="p-2 border border-gray-400">${escapeHtml(i.Name)}</td>
-                <td class="p-2 border border-gray-400 text-center">${i.Qty || 1}</td>
+                <td class="p-2 border border-gray-400 text-center">${escapeHtml(i.Qty || 1)}</td>
                 <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Price)}</td>
                 <td class="p-2 border border-gray-400 text-right font-mono">${formatRupiah(i.Total || Math.round(parseFloat(i.Price)*(i.Qty||1)))}</td>
                 <td class="p-2 border border-gray-400 text-xs">${escapeHtml(i.Keterangan || '')}</td>
