@@ -15,7 +15,7 @@ const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
 const UPLOAD_FOLDER_ID = '1TFVFKV7K33cIPXPMxrVrGGJUmUMHiHWl';
 const APP_TIMEZONE = 'Asia/Jakarta';
 const SESSION_TTL_HOURS = 12;
-const PBKDF2_ITERATIONS = 12000;
+const PBKDF2_ITERATIONS = 600000;
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ALLOWED_UPLOAD_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
 const SHARE_UPLOADS_WITH_LINK = true;
@@ -308,7 +308,7 @@ function verifyPassword_(storedValue, suppliedPassword) {
     var parts = stored.split('$');
     if (parts.length !== 4) return { valid: false, migrate: false };
     var iterations = parseInt(parts[1], 10);
-    if (!iterations || iterations < 10000 || iterations > 100000) {
+    if (!iterations || iterations < 10000 || iterations > 1000000) {
       return { valid: false, migrate: false };
     }
     var actual = passwordHash_(suppliedPassword, parts[2], iterations);
