@@ -85,10 +85,13 @@ function callAPI(action, data) {
     activeApiRequests += 1;
     if (loading) loading.classList.remove('hidden');
 
+    const controller = new AbortController();
+    const requestTimeout = setTimeout(() => controller.abort(), 90000);
     return fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action, data: data || {}, token: localStorage.getItem('token') })
+        body: JSON.stringify({ action, data: data || {}, token: localStorage.getItem('token') }),
+        signal: controller.signal
     })
     .then(response => {
         if (!response.ok) throw new Error('Server returned HTTP ' + response.status);
@@ -103,9 +106,13 @@ function callAPI(action, data) {
     })
     .catch(error => {
         console.error('API request failed (' + action + '):', error);
-        return { status: 'error', message: error.message || 'Tidak dapat terhubung ke server.' };
+        const message = error.name === 'AbortError'
+            ? 'Permintaan melewati batas 90 detik. Periksa deployment Apps Script dan Execution log.'
+            : (error.message || 'Tidak dapat terhubung ke server.');
+        return { status: 'error', message };
     })
     .finally(() => {
+        clearTimeout(requestTimeout);
         activeApiRequests = Math.max(0, activeApiRequests - 1);
         if (loading && activeApiRequests === 0) loading.classList.add('hidden');
     });
@@ -120,7 +127,7 @@ function login() {
             document.getElementById('loginScreen').classList.add('hidden');
             document.getElementById('dashboardScreen').classList.remove('hidden');
             showPage('quote');
-        } else alert('Login Gagal! Username/Password salah.');
+        } else alert('Login gagal: ' + (res.message || 'Periksa username dan password.'));
     });
 }
 
