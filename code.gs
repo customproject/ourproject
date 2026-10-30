@@ -326,30 +326,47 @@ function handleLogin(data) {
     throw new Error('Username and password are required.');
   }
 
-  return withScriptLock_(function() {
-    var sheet = getSheet_('Admin');
-    var values = sheet.getDataRange().getValues();
-    if (values.length < 2) throw new Error('No administrator account is configured.');
+  // Perform the expensive password verification outside the script lock so
+  // logins do not block invoice/quotation writes while PBKDF2 is running.
+  var sheet = getSheet_('Admin');
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) throw new Error('No administrator account is configured.');
 
-    var headers = values[0].map(function(value) { return String(value).trim().toLowerCase(); });
-    var usernameIndex = headers.indexOf('username');
-    var passwordIndex = headers.indexOf('password');
-    if (usernameIndex < 0) usernameIndex = 0;
-    if (passwordIndex < 0) passwordIndex = 1;
+  var headers = values[0].map(function(value) { return String(value).trim().toLowerCase(); });
+  var usernameIndex = headers.indexOf('username');
+  var passwordIndex = headers.indexOf('password');
+  if (usernameIndex < 0) usernameIndex = 0;
+  if (passwordIndex < 0) passwordIndex = 1;
 
-    for (var i = 1; i < values.length; i++) {
-      if (constantTimeEquals_(String(values[i][usernameIndex] || ''), username)) {
-        var verification = verifyPassword_(values[i][passwordIndex], password);
-        if (!verification.valid) break;
-        if (verification.migrate) {
-          sheet.getRange(i + 1, passwordIndex + 1).setValue(createPasswordHash_(password));
-        }
-        var token = 'AUTH_' + Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
-        createSession_(token, username);
-        return { token: token, expiresInHours: SESSION_TTL_HOURS };
-      }
+  var adminRow = -1;
+  var storedPassword = '';
+  for (var i = 1; i < values.length; i++) {
+    if (constantTimeEquals_(String(values[i][usernameIndex] || ''), username)) {
+      adminRow = i + 1;
+      storedPassword = String(values[i][passwordIndex] || '');
+      break;
     }
-    throw new Error('Invalid credentials.');
+  }
+  if (adminRow < 0) throw new Error('Invalid credentials.');
+
+  var verification = verifyPassword_(storedPassword, password);
+  if (!verification.valid) throw new Error('Invalid credentials.');
+
+  // Recheck the credential under lock before migrating it. This prevents a
+  // concurrent password change from being overwritten by a stale login read.
+  var token = 'AUTH_' + Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
+  var upgradedPassword = verification.migrate ? createPasswordHash_(password) : null;
+  return withScriptLock_(function() {
+    var currentSheet = getSheet_('Admin');
+    var currentValue = String(currentSheet.getRange(adminRow, passwordIndex + 1).getValue() || '');
+    if (!constantTimeEquals_(currentValue, storedPassword)) {
+      throw new Error('Administrator credentials changed. Please try logging in again.');
+    }
+    if (verification.migrate) {
+      currentSheet.getRange(adminRow, passwordIndex + 1).setValue(upgradedPassword);
+    }
+    createSession_(token, username);
+    return { token: token, expiresInHours: SESSION_TTL_HOURS };
   });
 }
 
