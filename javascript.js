@@ -635,7 +635,7 @@ function buildInvoicePDF(invData, items, sender) {
 
     const uploadRec = historyUploads.find(u => u.RefID === invData.InvID);
     const finalFileUrl = safeHttpUrl(uploadRec ? uploadRec.FileURL : (invData.UploadedFileURL || '')) || null;
-    const uploadHTML = finalFileUrl ? `<p class="text-sm mt-3 pt-3 border-t border-gray-200"><b>Lampiran Bukti Pekerjaan:</b> <br> <a href="${finalFileUrl}" target="_blank" class="text-blue-600 underline break-all">${finalFileUrl}</a></p>` : '';
+    const uploadHTML = finalFileUrl ? `<p class="text-sm mt-3 pt-3 border-t border-gray-200"><b>Lampiran Bukti Pekerjaan:</b><br><a href="${escapeHtml(finalFileUrl)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline break-all">${escapeHtml(finalFileUrl)}</a></p>` : '';
 
     const notesStr = (invData.Notes || '').trim();
     const notesHTML = (notesStr !== '' && notesStr !== '-') ? `<p class="text-sm mt-3 whitespace-pre-line">Catatan:<br>${escapeHtml(notesStr)}</p>` : '';
@@ -738,7 +738,7 @@ function unlockPublicDoc() {
             document.getElementById('publicDocContent').classList.remove('hidden');
             
             const data = res.data;
-            let parsed = JSON.parse(data.ItemsJSON);
+            let parsed = safeJsonParse(data.ItemsJSON, []);
             let items = Array.isArray(parsed) ? parsed : (parsed.itemsList || []);
             let sender = Array.isArray(parsed) ? { name: 'Fiky Alannuari', phone: '0813-8792-6814', address: 'Cengkareng, Jakarta Barat 11730' } : (parsed.senderInfo || {});
             
