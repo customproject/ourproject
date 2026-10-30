@@ -1,5 +1,5 @@
 // GANTI DENGAN URL DEPLOYMENT BARU ANDA YANG TELAH DI-UPDATE!
-const API_URL = "https://script.google.com/macros/s/AKfycbxgmeIMnF4FA1u8yJ0sWKptJJS_RWx41lOCHp4kzoZI9vsCkI6r94Q8-LOcuGfTthQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzw-cfeHwsSBw7eUetDP4OA0aOcq6o25jyb2vCHm4xcx9YSepV4GfyejBTXZC5_Y4O0/exec";
 let activeApiRequests = 0;
 
 function escapeHtml(value) {
