@@ -616,13 +616,26 @@ function generatePin_() {
   return String(100000 + (parseInt(hex.substring(0, 8), 16) % 900000));
 }
 
+function inferLegacyPphStatus_(subtotal, suppliedPphAmount) {
+  var amount = parseMoney_(suppliedPphAmount || 0, 'PPh amount');
+  if (amount === 0) return 'none';
+  var candidates = ['dipotong_2', 'ditanggung_2', 'dipotong_25', 'ditanggung_25'];
+  for (var i = 0; i < candidates.length; i++) {
+    if (calculateTaxes_(subtotal, false, candidates[i]).pph === amount) return candidates[i];
+  }
+  throw new Error('PPh selection is missing or inconsistent. Refresh the application and try again.');
+}
+
 function saveInvoice(data) {
   var quoteId = cleanText_(data.quoteId, 100);
   var bankId = cleanText_(data.bankId, 250);
   if (!quoteId) throw new Error('Quotation reference is required.');
   if (!bankId) throw new Error('Payment account is required.');
   var date = parseDate_(data.date);
-  var ppnEnabled = data.ppnEnabled === true || String(data.ppnEnabled) === 'true';
+  var ppnProvided = Object.prototype.hasOwnProperty.call(data, 'ppnEnabled');
+  var ppnEnabled = ppnProvided
+    ? (data.ppnEnabled === true || String(data.ppnEnabled) === 'true')
+    : (parseMoney_(data.taxPPN || 0, 'PPN amount') > 0);
   var pphStatus = cleanText_(data.pphStatus || 'none', 30);
 
   return withScriptLock_(function() {
@@ -632,7 +645,10 @@ function saveInvoice(data) {
     var snapshot = parseStoredItems_(quotation.ItemsJSON);
     var items = snapshot.items;
     var subtotal = items.reduce(function(sum, item) { return sum + item.Total; }, 0);
-    var taxes = calculateTaxes_(subtotal, ppnEnabled, pphStatus);
+    var effectivePphStatus = Object.prototype.hasOwnProperty.call(data, 'pphStatus')
+      ? pphStatus
+      : inferLegacyPphStatus_(subtotal, data.taxPPh);
+    var taxes = calculateTaxes_(subtotal, ppnEnabled, effectivePphStatus);
     var id = generateID('Invoices', 'INV' + Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyMM'));
     var pin = generatePin_();
     var itemsJson = serializeDocumentItems_(items, snapshot.sender);
