@@ -154,7 +154,8 @@ The request handlers and persistence behavior are implemented in the repository'
 
 ## Authentication and security notes
 
-- The admin login sends the entered username and password to the backend. Legacy plaintext passwords are upgraded to salted PBKDF2-HMAC-SHA256 hashes (600,000 iterations) after successful verification.
+- The admin login stores salted PBKDF2-HMAC-SHA256 password hashes using 10,000 iterations. This is a deliberate Apps Script runtime compromise: 600,000 HMAC iterations caused deployed login requests to time out. Use a dedicated authentication service for stronger password hashing before exposing the app to a high-risk environment.
+- To initialize or recover an administrator when the `Admin` sheet has no account rows, open the spreadsheet's bound Apps Script editor, select `createOrResetAdminAccount`, and click **Run**. Approve the requested spreadsheet permissions, then enter the username and a new password in the prompts. This function is editor-run only and is not exposed as a public web API action. It creates the account if absent or resets the matching username if present.
 - New session tokens are stored as SHA-256 digests in the `Sessions` sheet, expire after 12 hours, and can be revoked by the authenticated `logout` action.
 - Subsequent frontend API calls attach the bearer token from `localStorage`; the UI logs out when it receives an unauthorized response.
 - A token's presence in `localStorage` only controls the initial frontend display. The backend must validate the token and authorize every protected operation.
@@ -166,7 +167,7 @@ The request handlers and persistence behavior are implemented in the repository'
 
 The backend implementation is present in `code.gs`, but these environment-specific details still require verification against the live Google account and spreadsheet:
 
-- Apps Script execution time and service quotas, especially the PBKDF2 password migration/login step
+- Apps Script execution time and service quotas, especially synchronous password hashing
 - Actual spreadsheet sheet names, header rows, and access permissions
 - Actual Drive folder permissions and whether Workspace policy permits link sharing
 - Correct deployment URL, web-app access settings, and browser-to-Apps-Script connectivity
